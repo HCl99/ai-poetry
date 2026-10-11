@@ -12,7 +12,7 @@ interface PoemItem {
 }
 type DimKey = 'zici' | 'diangu' | 'qinggan' | 'geli';
 interface Dim { key: DimKey; tag: string; content: string; citation: string }
-interface RelatedPoem { id: string; title: string; author: string; dynasty: string }
+interface RelatedPoem { id: string; title: string; author: string; dynasty: string; score?: number | null }
 interface Step { label: string; detail?: string }
 interface StreamState {
   model: string;
@@ -136,7 +136,7 @@ export function AnnotateView() {
       <div>
         <h1 className="font-brush text-3xl text-ink-black">AI智能注解</h1>
         <p className="mt-1.5 font-ui text-sm text-ink-soft">
-          知识库检索 · 引用追溯，先检索同意象诗篇与诗人小传，再四维度生成注解
+          RAG · 向量语义检索 · 引用追溯，先以 BGE 向量检索相似诗篇与诗人小传，再四维度生成注解
         </p>
       </div>
 
@@ -211,8 +211,8 @@ export function AnnotateView() {
               <span className="font-ui text-xs font-medium" style={{ color: '#6B8E7B' }}>检索与引用追溯</span>
             </div>
             <p className="mt-2 font-ui text-xs leading-relaxed text-ink-soft">
-              每条注解先检索意象共现诗篇与诗人小传作为上下文，再交由大模型生成，
-              卡片底部标注真实引用出处，AI 言之有据。
+              每条注解先以 BGE 中文向量模型将诗词编码为 512 维语义向量，在向量库中检索最相似的诗篇，
+              连同诗人小传一起作为上下文交由大模型生成，卡片底部标注真实引用出处与相似度，AI 言之有据。
             </p>
           </div>
         </div>
@@ -225,7 +225,7 @@ export function AnnotateView() {
               {stream && (
                 <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>
                   <span className={`h-1.5 w-1.5 rounded-full ${loading ? 'animate-pulse' : ''}`} style={{ background: '#6B8E7B' }} />
-                  {stream.phase === 'retrieve' ? '知识库检索中' : stream.phase === 'generate' ? 'AI 撰写中' : '引用可追溯'}
+                  {stream.phase === 'retrieve' ? '向量检索中' : stream.phase === 'generate' ? 'AI 撰写中' : '引用可追溯'}
                 </span>
               )}
             </div>
@@ -323,16 +323,17 @@ export function AnnotateView() {
                   );
                 })}
 
-                {/* 检索到的同意象诗篇（meta 到达即可见，体现先检索后生成） */}
+                {/* 向量语义检索到的相似诗篇（meta 到达即可见，体现先检索后生成） */}
                 {stream.related.length > 0 && (
                   <div className="rounded-lg p-4" style={{ border: '1px dashed #D4CFC5', background: 'rgba(123,142,161,0.05)' }}>
                     <div className="mb-2 flex items-center gap-1.5 font-ui text-xs font-medium text-muted-blue">
-                      <Network className="h-3.5 w-3.5" /> 检索到的同意象参照诗篇
+                      <Network className="h-3.5 w-3.5" /> RAG · 向量语义检索到的相似诗篇
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {stream.related.map((r) => (
                         <span key={r.id} className="rounded-full bg-white/70 px-3 py-1 font-ui text-xs text-ink-mid">
                           《{r.title}》 {r.author}
+                          {r.score != null && <span className="ml-1 text-sepia">{(r.score * 100).toFixed(0)}%</span>}
                         </span>
                       ))}
                     </div>

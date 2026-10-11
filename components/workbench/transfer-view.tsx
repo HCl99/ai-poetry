@@ -15,7 +15,7 @@ const STYLES = [
 
 const EXAMPLE = '下雨天一个人走回家，路上想起了远方的朋友';
 
-interface Meta { style: string; form: string; model: string }
+interface Meta { style: string; form: string; model: string; exemplars?: { title: string; score: number }[] }
 interface DoneInfo { latencyMs: number; saved: boolean }
 
 export function TransferView() {
@@ -24,6 +24,7 @@ export function TransferView() {
   const [loading, setLoading] = useState(false);
   const [poem, setPoem] = useState('');
   const [meta, setMeta] = useState<Meta | null>(null);
+  const [stepText, setStepText] = useState('');
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [error, setError] = useState('');
   const { msg, show } = useToast();
@@ -36,6 +37,7 @@ export function TransferView() {
     setPoem('');
     setMeta(null);
     setDoneInfo(null);
+    setStepText('');
     try {
       const r = await fetch('/api/transfer', {
         method: 'POST',
@@ -48,6 +50,7 @@ export function TransferView() {
       }
       for await (const { event, data } of sseEvents(r)) {
         if (event === 'meta') setMeta(data);
+        else if (event === 'step') setStepText(data.detail || data.label || '');
         else if (event === 'delta') setPoem((p) => p + (data.text || ''));
         else if (event === 'error') throw new Error(data.error || '生成失败');
         else if (event === 'done') {
@@ -138,7 +141,7 @@ export function TransferView() {
             <div className="flex flex-1 flex-col items-center justify-center py-16">
               <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
               <p className="mt-4 font-ui text-sm text-ink-soft">AI 正在涵泳构思…</p>
-              <p className="mt-1 font-ui text-xs text-ink-soft/70">提炼意象 · 匹配风格 · 逐句炼字</p>
+              <p className="mt-1 font-ui text-xs text-ink-soft/70">{stepText || 'RAG 向量检索风格范例 · 逐句炼字'}</p>
             </div>
           )}
 
@@ -169,6 +172,16 @@ export function TransferView() {
                   </span>
                 )}
               </div>
+              {meta?.exemplars && meta.exemplars.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 font-ui text-xs text-ink-soft/80">
+                  <span>向量检索范例：</span>
+                  {meta.exemplars.map((e) => (
+                    <span key={e.title} className="rounded-full bg-white/70 px-2.5 py-0.5">
+                      《{e.title}》<span className="ml-1 text-sepia">{(e.score * 100).toFixed(0)}%</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -19,12 +19,17 @@ export default async function DashboardPage() {
   const uid = session!.user.id!;
   const name = session!.user.name || '诗词探索者';
 
-  const [favCount, creationCount, annotateCount, histories, recommend, imageryTop, agentLogs] =
+  const [favCount, creationCount, annotateCount, histories, readPoems, recommend, imageryTop, agentLogs] =
     await Promise.all([
       prisma.favorite.count({ where: { userId: uid } }),
       prisma.creation.count({ where: { userId: uid } }),
       prisma.history.count({ where: { userId: uid, actionType: 'annotate' } }),
       prisma.history.findMany({ where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      prisma.history.findMany({
+        where: { userId: uid, targetId: { not: null } },
+        distinct: ['targetId'],
+        select: { targetId: true },
+      }),
       prisma.poem.findFirst({
         where: { annotations: { isNot: null }, tags: { not: '[]' } },
         select: { id: true, title: true, author: true, dynasty: true, paragraphsSimp: true },
@@ -36,6 +41,7 @@ export default async function DashboardPage() {
 
   const recommendLines = (recommend?.paragraphsSimp as string[] | null)?.slice(0, 2) || [];
   const recent = histories.slice(0, 4);
+  const readCount = readPoems.length;
   const previewAnnotation = await prisma.poem.findFirst({
     where: { annotations: { isNot: null } },
     select: {
@@ -53,7 +59,7 @@ export default async function DashboardPage() {
           <div>
             <h1 className="font-brush text-3xl text-paper-light md:text-4xl">{greeting()}，{name}</h1>
             <p className="mt-2 font-ui text-sm" style={{ color: 'rgba(245,242,236,0.75)' }}>
-              今日已探索 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
+              最近活动 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
             </p>
             {recommend && (
               <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'rgba(245,242,236,0.12)' }}>
@@ -78,7 +84,7 @@ export default async function DashboardPage() {
       {/* 统计卡片 */}
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { icon: <BookOpen className="h-5 w-5" />, label: '已读诗词', value: histories.length ? `${recent.length + 124}` : '128', trend: '今日 +3', c: '#7B8EA1' },
+          { icon: <BookOpen className="h-5 w-5" />, label: '研习诗词', value: `${readCount}`, trend: readCount ? '注解 · 收藏' : '开始探索', c: '#7B8EA1' },
           { icon: <Sparkles className="h-5 w-5" />, label: 'AI注解', value: `${annotateCount}`, trend: annotateCount ? '持续生成中' : '开始体验', c: '#6B8E7B' },
           { icon: <Edit className="h-5 w-5" />, label: '风格创作', value: `${creationCount}`, trend: creationCount ? '灵感迸发' : '去创作一首', c: '#8B7355' },
           { icon: <Star className="h-5 w-5" />, label: '我的收藏', value: `${favCount}`, trend: favCount ? '书藏万卷' : '发现美诗', c: '#A67C7C' },
@@ -120,7 +126,7 @@ export default async function DashboardPage() {
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-ui text-xs" style={{ border: '1px dashed #7B8EA1', color: '#7B8EA1', background: 'rgba(123,142,161,0.06)' }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
-                RAG · 向量库匹配
+                知识库 · 意象检索
               </div>
             </div>
           </div>
@@ -148,7 +154,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* 意象快捷入口 + Agent活动 */}
+      {/* 意象快捷入口 + 注解记录 */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="paper-card p-6">
           <div className="mb-4 flex items-center justify-between">
@@ -167,13 +173,13 @@ export default async function DashboardPage() {
 
         <div className="paper-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-ui text-[15px] font-medium text-ink-deep">Agent活动记录</h2>
+            <h2 className="font-ui text-[15px] font-medium text-ink-deep">AI 注解记录</h2>
             <span className="inline-flex items-center gap-1.5 font-ui text-xs" style={{ color: '#6B8E7B' }}>
               <span className="pulse-dot" /> 运行正常
             </span>
           </div>
           {agentLogs.length === 0 && (
-            <p className="py-8 text-center font-ui text-sm text-ink-soft">Agent尚未活动，生成一条AI注解试试</p>
+            <p className="py-8 text-center font-ui text-sm text-ink-soft">还没有注解记录，生成一条 AI 注解试试</p>
           )}
           <div className="relative space-y-4 pl-5">
             <span className="absolute left-[6px] top-1 h-[calc(100%-8px)] w-px" style={{ background: '#E5DFD4' }} />
@@ -182,7 +188,7 @@ export default async function DashboardPage() {
                 <span className="absolute -left-5 top-1 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
                 <div className="font-ui text-sm text-ink-deep">{l.userQuery || 'AI注解'}</div>
                 <p className="mt-0.5 font-ui text-xs text-ink-soft">
-                  glm-4-flash · RAG检索 {(l.retrievedChunks as string[] | null)?.length ?? 0} 篇 · {l.latencyMs ?? 0}ms
+                  glm-4-flash · 知识库检索 {(l.retrievedChunks as string[] | null)?.length ?? 0} 篇 · {l.latencyMs ?? 0}ms
                 </p>
                 <p className="mt-0.5 font-ui text-xs text-ink-soft">
                   {l.createdAt.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}

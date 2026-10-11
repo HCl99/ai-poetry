@@ -89,11 +89,13 @@ def main():
     def build_poem(row):
         pid, title, author, paras = row
         body = "".join(json.loads(paras) if paras else [])
-        return pid, pid, f"《{title}》{author}：{body}"[:400]
+        text = f"《{title}》{author}：{body}"[:400].strip()
+        return pid, pid, text or f"《{title}》{author}"  # 空文本会导致 tokenize 失败
 
     def build_bio(row):
         bid, name, bio = row
-        return bid, None, f"{name}：{bio or ''}"[:600]
+        text = f"{name}：{bio or ''}"[:600].strip()
+        return bid, None, text or (name or "佚名")
 
     # 核心语料：有可考小传的诗人作品（17.1 万首），兼顾覆盖与质量
     run(conn, model, "poem",

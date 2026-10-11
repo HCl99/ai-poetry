@@ -10,10 +10,10 @@
 
 「墨韵诗心」面向古典诗词学习与创作场景，以现代前端框架为主体、Next.js API Routes 作为 AI 能力接入层，提供：
 
-- **AI 智能注解**：对任意一首诗输出「字词释义 / 典故溯源 / 情感分析 / 格律分析」四维度注解；生成前先检索**同意象诗篇**与**诗人小传**作为上下文，并在每张卡片标注真实引用出处，做到言之有据。
+- **AI 智能注解**：对任意一首诗输出「字词释义 / 典故溯源 / 情感分析 / 格律分析」四维度注解；生成前先以本地部署的 **BGE-small-zh 中文向量模型**将诗词编码为 512 维语义向量，在向量库（16.7 万首）中做余弦相似度检索取得最相似的诗篇，连同**诗人小传**一起作为上下文，并在每张卡片标注真实引用出处与相似度，做到言之有据。
 - **诗人风格迁移**：输入一段现代文，AI 提炼意象、匹配诗人语言风格，逐句生成李白体 / 苏轼体 / 婉约体 / 王维体 / 杜甫体古诗词。
-- **SSE 流式体验**：注解与创作均为服务端流式输出，前端逐字渲染；注解页实时展示「解析正文 → 识别意象 → 检索诗篇 → 匹配小传 → 大模型撰写」的思考过程，生成后可折叠回看。
-- **诗词探索与意象图谱**：基于约 5.7 万首唐诗语料的检索、朝代 / 标签筛选，以及核心意象的可视化与诗词关联。
+- **SSE 流式体验**：注解与创作均为服务端流式输出，前端逐字渲染；注解页实时展示「解析正文 → 语义向量化 → RAG 向量检索 → 匹配小传 → 大模型撰写」的思考过程，生成后可折叠回看。
+- **诗词探索与意象图谱**：基于约 34 万首唐宋诗词语料的检索、朝代 / 标签筛选，以及核心意象的可视化与诗词关联。
 - **个人空间**：NextAuth 邮箱注册登录，收藏、浏览历史、AI 创作、学习笔记持久化。
 
 ## 二、技术架构
@@ -28,16 +28,16 @@
                                  ▼
 ┌──────────────────────────────────────────────────────────┐
 │              Next.js API Routes（AI 接入层）               │
-│  NextAuth 鉴权 · 参数校验 · 知识检索编排 · Prompt 构建      │
+│  NextAuth 鉴权 · 参数校验 · RAG 检索编排 · Prompt 构建      │
 │  /api/annotation  /api/transfer  /api/poems  /api/user/*  │
-└───────────────┬──────────────────────────┬───────────────┘
-                │ chat.completions(stream) │ Prisma ORM
-                ▼                          ▼
-        智谱 GLM-4-Flash            ┌──────────────────┐
-        （流式大语言模型）           │      MySQL       │
-                                    │ 诗库·注解·意象库  │
-                                    │ 小传·用户·行为表  │
-                                    └──────────────────┘
+└─────┬────────────────┬───────────────────────┬───────────┘
+      │ chat.completions(stream) │ /embed      │ Prisma ORM
+      ▼                        ▼               ▼
+ 智谱 GLM-4-Flash      本地 BGE 向量服务   ┌──────────────────┐
+ （流式大语言模型）     bge-small-zh-v1.5  │      MySQL       │
+                       (embed_server.py)  │ 诗库·注解·意象库  │
+                                          │ 小传·向量·用户表  │
+                                          └──────────────────┘
 ```
 
 **设计取向**：遵循赛事"以前端 Web 为主体、后端仅作 AI 接入层"的导向，业务编排放在 Next.js API Routes，不引入独立后端服务。
@@ -96,13 +96,20 @@ cp .env.example .env      # Windows: copy .env.example .env
 mysql -u root -p -e "CREATE DATABASE ai_poetry DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 # 4. 导入语料与建表（一次性）
-pip install pymysql opencc
-python scripts/import_to_mysql.py     # 建语料 8 表并灌入约 5.7 万首诗
-python scripts/create_users_table.py  # 建 users 鉴权表
-python scripts/create_user_tables.py  # 建收藏/历史/创作/笔记表
+pip install pymysql opencc sentence-transformers flask
+python scripts/import_to_mysql.py       # 建语料表并灌入约 34 万首诗词
+python scripts/create_users_table.py    # 建 users 鉴权表
+python scripts/create_user_tables.py    # 建收藏/历史/创作/笔记表
+python scripts/migrate_chunks_vector.py # chunks 向量表迁移
 npx prisma generate
 
-# 5. 启动开发服务器
+# 5. 生成语义向量（本地 BGE 模型，约 17 万首核心语料，可中断续跑）
+python scripts/gen_embeddings.py
+
+# 6. 启动向量微服务（供查询时向量化，端口 8100）
+python scripts/embed_server.py
+
+# 7. 启动开发服务器
 npm run dev            # http://localhost:3000
 ```
 
@@ -118,6 +125,7 @@ npm run dev            # http://localhost:3000
 | `DATABASE_URL` | Prisma 连接串，密码中 `@` 需编码为 `%40` |
 | `ZHIPUAI_API_KEY` | 智谱 AI API Key（**切勿提交真实密钥**） |
 | `ZHIPUAI_BASE_URL` | 智谱 API 地址，默认 `https://open.bigmodel.cn/api/paas/v4` |
+| `EMBED_SERVER_URL` | 本地 BGE 向量服务地址，默认 `http://127.0.0.1:8100` |
 | `AUTH_SECRET` | NextAuth 密钥，生产用 `openssl rand -base64 32` 生成 |
 | `AUTH_URL` / `AUTH_TRUST_HOST` | 应用地址与托管信任开关 |
 
@@ -134,7 +142,8 @@ npm run dev            # http://localhost:3000
 ## 八、AI 实现说明
 
 - **模型接入**：通过 OpenAI 兼容 SDK 接入智谱 `glm-4-flash`，针对注解（结构化、低温）与创作（高发散、高温）使用不同 Prompt 模板与采样参数。
-- **检索增强（知识库）**：注解生成前，先依据"诗篇—意象"关联表检索同意象参照诗篇，并载入诗人小传与已有白话译文作为上下文，再交由大模型生成；每条注解附真实来源标签（意象共现检索 / 诗人小传 / 赏析库等）。
+- **向量语义检索（RAG）**：本地部署 `BAAI/bge-small-zh-v1.5` 中文向量模型（512 维，私有化无外部依赖），将 16.7 万首"有可考诗人小传"的诗词离线编码入库（`chunks` 表）；查询时经 `scripts/embed_server.py` 微服务向量化，在内存向量库（`lib/vectorStore.ts`）中做全量余弦 topK 检索（17 万 × 512 维，百毫秒级）。注解检索相似诗篇、风格迁移检索该诗人的语义相近范例作为 few-shot 上下文；向量服务不可用时自动降级为意象共现检索，保证可用性。
+- **检索增强（知识库）**：注解生成前载入向量检索结果、诗人小传与已有白话译文作为上下文；每条注解附真实来源标签与相似度（向量语义检索 · 相似度 0.86 / 诗人小传 / 赏析库等），引用可追溯。
 - **流式输出**：两个 AI 接口均使用 `stream: true` + SSE 转发，前端通过统一的 `lib/sse.ts` 异步迭代器解析半包 / 粘包；注解按 `【小节】` 标记由 `lib/sections.ts` 在流式中途与结束后做一致解析，结束时以后端权威结果校正。
 - **可控性与兜底**：登录鉴权、参数校验、JSON / 分节解析容错、异常统一回传错误事件、前端错误边界与重试。
 
@@ -148,11 +157,11 @@ npm run dev            # http://localhost:3000
 
 以下为明确的技术演进方向，**当前版本尚未包含**，避免与现状混淆：
 
-1. **真·向量语义检索 RAG**：引入 embedding 与向量库，替换当前的标签共现检索，并做"有 / 无检索"的质量对比。
-2. **AI Agent + Function Calling**：可自主调用生平检索、格律校验、注音、配图等工具的"诗词导师"，并展示规划与工具调用链。
-3. **多模态**：文生图水墨意境配图、Web Speech 语音朗诵。
-4. **MCP 工具化**：将诗词检索能力封装为 MCP Server，供外部 Agent 调用。
-5. **真格律引擎 + 端侧推理**：离线平仄 / 押韵校验、Transformers.js 端侧智能等。
+1. **AI Agent + Function Calling**：可自主调用生平检索、格律校验、注音、配图等工具的"诗词导师"，并展示规划与工具调用链。
+2. **多模态**：文生图水墨意境配图、Web Speech 语音朗诵。
+3. **MCP 工具化**：将诗词检索能力封装为 MCP Server，供外部 Agent 调用。
+4. **真格律引擎 + 端侧推理**：离线平仄 / 押韵校验、Transformers.js 端侧智能等。
+5. **向量索引升级**：向量规模扩大后引入 HNSW 近似最近邻索引（如 pgvector / Milvus），并做"有 / 无检索"的注解质量对比评估。
 
 ## 十一、团队信息
 

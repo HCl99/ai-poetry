@@ -165,7 +165,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
         <HeroBackdrop />
         <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
           <div className="anim-fade-up mb-6 flex flex-wrap items-center justify-center gap-2 font-ui text-xs text-ink-mid">
-            {['大语言模型', '知识库检索', '引用追溯', 'SSE流式生成'].map((t) => (
+            {['大语言模型', 'RAG向量检索', '引用追溯', 'SSE流式生成'].map((t) => (
               <span key={t} className="rounded-full border border-c bg-paper-light/70 px-3 py-1">{t}</span>
             ))}
           </div>
@@ -273,7 +273,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
             <p className="mt-4 font-ui text-[15px] leading-relaxed text-ink-soft">
               大模型深度解析字词典故、修辞手法、情感意境，四维度输出——
               <b className="text-ink-mid">字词释义</b>、<b className="text-ink-mid">典故溯源</b>、<b className="text-ink-mid">情感分析</b>、<b className="text-ink-mid">格律分析</b>。
-              每条注解均标注出处诗篇与典故源流，知识库检索与引用追溯让 AI 言之有据。
+              每条注解均标注出处诗篇与典故源流，向量语义检索与引用追溯让 AI 言之有据。
             </p>
             <div className="mt-6 space-y-3">
               {['字词释义：逐字解析关键字词含义与用法', '典故溯源：追溯意象历史演变与文化源流', '情感分析：还原诗词情感路径与意境层次', '格律分析：自动检测平仄、押韵、对仗'].map((t, i) => (
@@ -299,7 +299,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
             <div className="space-y-3">
               {[
                 { tag: '字词释义', text: '"疑"字意为"好像"，以错觉写月光之皎洁流转。', cite: '《李太白全集》卷四' },
-                { tag: '典故溯源', text: '"明月"自《古诗十九首》"明月何皎皎"以来即为思乡核心意象。', cite: '意象共现检索' },
+                { tag: '典故溯源', text: '"明月"自《古诗十九首》"明月何皎皎"以来即为思乡核心意象。', cite: '向量语义检索' },
                 { tag: '情感分析', text: '情感路径：静景触发 → 疑惑 → 举头仰望 → 低头怀乡，层层递进。', cite: '参考袁行霈《中国文学史》' },
               ].map((a, i) => (
                 <div key={i} className="rounded-lg p-4" style={{ borderLeft: '3px solid #8B7355', background: '#F5F2EC' }}>
@@ -411,7 +411,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
             {[
               { icon: <Sparkles className="h-6 w-6" />, t: '大模型集成', d: '智能注解 + 五种诗人风格仿写，Prompt 限定平仄押韵意象', c: '#7B8EA1' },
               { icon: <EditIcon className="h-6 w-6" />, t: '流式生成', d: 'SSE 逐字输出，注解与创作实时呈现、思考过程可见', c: '#8B7355' },
-              { icon: <BookIcon className="h-6 w-6" />, t: '知识检索', d: '意象共现诗篇 + 诗人小传检索 + 引用追溯', c: '#6B8E7B' },
+              { icon: <BookIcon className="h-6 w-6" />, t: '向量检索', d: 'BGE 中文语义向量 · 相似诗篇召回 · 引用追溯', c: '#6B8E7B' },
               { icon: <NetworkIcon className="h-6 w-6" />, t: '诗词语料', d: '五万余首唐诗 + 万名诗人小传 + 核心意象库', c: '#C4A965' },
               { icon: <Sparkles className="h-6 w-6" />, t: '鉴权体系', d: 'NextAuth 登录鉴权，收藏 / 创作 / 历史持久化', c: '#A67C7C' },
               { icon: <LinkIcon className="h-6 w-6" />, t: '引用追溯', d: '每条注解标注真实检索出处，AI 言之有据', c: '#7B8EA1' },

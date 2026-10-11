@@ -41,32 +41,32 @@ function Sparkles({ className = '' }: { className?: string }) {
     </svg>
   );
 }
-function BookIcon() {
+function BookIcon({ className = '' }: { className?: string }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
     </svg>
   );
 }
-function EditIcon() {
+function EditIcon({ className = '' }: { className?: string }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
     </svg>
   );
 }
-function NetworkIcon() {
+function NetworkIcon({ className = '' }: { className?: string }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="5" r="2.5" /><circle cx="5" cy="19" r="2.5" /><circle cx="19" cy="19" r="2.5" />
       <path d="M12 7.5v4M12 11.5 6.5 17M12 11.5l5.5 5.5" />
     </svg>
   );
 }
-function LinkIcon() {
+function LinkIcon({ className = '' }: { className?: string }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
@@ -165,7 +165,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
         <HeroBackdrop />
         <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
           <div className="anim-fade-up mb-6 flex flex-wrap items-center justify-center gap-2 font-ui text-xs text-ink-mid">
-            {['AI Native', '多模态', 'RAG', 'Agent', 'MCP'].map((t) => (
+            {['大语言模型', '知识库检索', '引用追溯', 'SSE流式生成'].map((t) => (
               <span key={t} className="rounded-full border border-c bg-paper-light/70 px-3 py-1">{t}</span>
             ))}
           </div>
@@ -176,7 +176,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
             AI 古诗词文化探索平台
           </p>
           <p className="anim-fade-up mx-auto mt-6 max-w-2xl font-ui text-[15px] leading-relaxed text-ink-soft" style={{ animationDelay: '0.3s' }}>
-            融合大语言模型、RAG检索增强、多模态生成与Agent智能体，基于{numLabel.replace('+', '')}首开源古诗词数据，
+            融合大语言模型与知识库检索增强，基于{numLabel.replace('+', '')}首开源古诗词数据，
             提供诗词探索、智能注解、风格迁移、意象可视化一站式深度文化探索体验。
           </p>
           <div className="anim-fade-up mt-10 flex items-center justify-center gap-4" style={{ animationDelay: '0.4s' }}>
@@ -267,13 +267,13 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
         <div className="mx-auto grid max-w-[1400px] items-center gap-14 px-6 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>
-              <span className="pulse-dot" /> RAG引用追溯
+              <span className="pulse-dot" /> 知识库 · 引用追溯
             </span>
             <h2 className="mt-4 font-brush text-4xl text-ink-black">AI智能注解</h2>
             <p className="mt-4 font-ui text-[15px] leading-relaxed text-ink-soft">
               大模型深度解析字词典故、修辞手法、情感意境，四维度输出——
               <b className="text-ink-mid">字词释义</b>、<b className="text-ink-mid">典故溯源</b>、<b className="text-ink-mid">情感分析</b>、<b className="text-ink-mid">格律分析</b>。
-              每条注解均标注出处诗篇与典故源流，RAG向量检索让AI言之有据。
+              每条注解均标注出处诗篇与典故源流，知识库检索与引用追溯让 AI 言之有据。
             </p>
             <div className="mt-6 space-y-3">
               {['字词释义：逐字解析关键字词含义与用法', '典故溯源：追溯意象历史演变与文化源流', '情感分析：还原诗词情感路径与意境层次', '格律分析：自动检测平仄、押韵、对仗'].map((t, i) => (
@@ -299,7 +299,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
             <div className="space-y-3">
               {[
                 { tag: '字词释义', text: '"疑"字意为"好像"，以错觉写月光之皎洁流转。', cite: '《李太白全集》卷四' },
-                { tag: '典故溯源', text: '"明月"自《古诗十九首》"明月何皎皎"以来即为思乡核心意象。', cite: 'RAG · 向量库匹配' },
+                { tag: '典故溯源', text: '"明月"自《古诗十九首》"明月何皎皎"以来即为思乡核心意象。', cite: '意象共现检索' },
                 { tag: '情感分析', text: '情感路径：静景触发 → 疑惑 → 举头仰望 → 低头怀乡，层层递进。', cite: '参考袁行霈《中国文学史》' },
               ].map((a, i) => (
                 <div key={i} className="rounded-lg p-4" style={{ borderLeft: '3px solid #8B7355', background: '#F5F2EC' }}>
@@ -336,12 +336,11 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
           </div>
           <div className="lg:order-2">
             <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs" style={{ background: 'rgba(139,115,85,0.15)', color: '#8B7355' }}>
-              <span className="pulse-dot" style={{ background: '#8B7355' }} /> Agent智能体
+              <span className="pulse-dot" style={{ background: '#8B7355' }} /> AI 风格仿写
             </span>
             <h2 className="mt-4 font-brush text-4xl text-ink-black">诗人风格迁移</h2>
             <p className="mt-4 font-ui text-[15px] leading-relaxed text-ink-soft">
-              输入一段现代文，Agent智能体六步推理——语义分析 → 提取核心意象 →
-              匹配诗人风格特征 → RAG检索风格样本 → 生成初稿 → 格律校验修正，
+              输入一段现代文，AI 提炼核心意象、匹配诗人的风格特征，逐句炼字，
               将白话转化为李白之飘逸、苏轼之豪放、王维之空灵、杜甫之沉郁。
             </p>
             <Link href={isLoggedIn ? '/workbench/transfer' : '#'} onClick={(e) => { if (!isLoggedIn) { e.preventDefault(); setModalOpen(true); } }} className="mt-8 inline-flex items-center gap-2 rounded-lg px-6 py-3 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover" style={{ background: 'linear-gradient(135deg,#7B8EA1,#5D5853)' }}>
@@ -407,15 +406,15 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
       <section id="arch" className="reveal py-24">
         <div className="mx-auto max-w-[1400px] px-6 text-center">
           <h2 className="font-brush text-4xl text-ink-black">技术架构</h2>
-          <p className="mt-3 font-ui text-[15px] text-ink-soft">六项AI技术全覆盖 · 前后端分离 · MCP工具开放</p>
+          <p className="mt-3 font-ui text-[15px] text-ink-soft">大模型驱动 · 知识库检索 · 流式生成体验</p>
           <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3 lg:grid-cols-6">
             {[
-              { icon: <Sparkles className="h-6 w-6" />, t: '大模型集成', d: '智能注解 + 诗人仿写，Prompt限定平仄押韵意象', c: '#7B8EA1' },
-              { icon: <EditIcon className="h-6 w-6" />, t: 'Agent', d: '风格迁移智能体，六步推理 + 格律自校验', c: '#8B7355' },
-              { icon: <BookIcon className="h-6 w-6" />, t: 'RAG', d: '诗词向量库 + 典故检索 + 引用追溯', c: '#6B8E7B' },
-              { icon: <NetworkIcon className="h-6 w-6" />, t: '多模态', d: '意象水墨画生成 + 书法字体渲染', c: '#C4A965' },
-              { icon: <Sparkles className="h-6 w-6" />, t: 'AI安全', d: '文化合规过滤，避免恶搞历史人物', c: '#A67C7C' },
-              { icon: <LinkIcon className="h-6 w-6" />, t: 'MCP', d: '诗词检索工具封装，可被外部Agent调用', c: '#7B8EA1' },
+              { icon: <Sparkles className="h-6 w-6" />, t: '大模型集成', d: '智能注解 + 五种诗人风格仿写，Prompt 限定平仄押韵意象', c: '#7B8EA1' },
+              { icon: <EditIcon className="h-6 w-6" />, t: '流式生成', d: 'SSE 逐字输出，注解与创作实时呈现、思考过程可见', c: '#8B7355' },
+              { icon: <BookIcon className="h-6 w-6" />, t: '知识检索', d: '意象共现诗篇 + 诗人小传检索 + 引用追溯', c: '#6B8E7B' },
+              { icon: <NetworkIcon className="h-6 w-6" />, t: '诗词语料', d: '五万余首唐诗 + 万名诗人小传 + 核心意象库', c: '#C4A965' },
+              { icon: <Sparkles className="h-6 w-6" />, t: '鉴权体系', d: 'NextAuth 登录鉴权，收藏 / 创作 / 历史持久化', c: '#A67C7C' },
+              { icon: <LinkIcon className="h-6 w-6" />, t: '引用追溯', d: '每条注解标注真实检索出处，AI 言之有据', c: '#7B8EA1' },
             ].map((x) => (
               <div key={x.t} className="paper-card paper-card-hover p-5 text-left">
                 <div style={{ color: x.c }}>{x.icon}</div>
@@ -425,7 +424,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
             ))}
           </div>
           <div className="mt-10 flex flex-wrap justify-center gap-3 font-ui">
-            {['Next.js 14', 'TypeScript', 'MySQL', 'NextAuth', '智谱GLM-4', 'Embedding检索', 'Agent编排', 'Tailwind'].map((t) => (
+            {['Next.js 14', 'TypeScript', 'Prisma', 'MySQL', 'NextAuth', '智谱GLM-4', 'SSE流式', 'Tailwind'].map((t) => (
               <span key={t} className="rounded-full border border-c bg-paper-light px-3.5 py-1 text-xs text-ink-mid">{t}</span>
             ))}
           </div>

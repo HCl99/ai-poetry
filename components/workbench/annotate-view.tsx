@@ -1,21 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { sseEvents } from '@/lib/sse';
+import { parseAnnotationSections } from '@/lib/sections';
 
 interface PoemItem {
   id: string; title: string; author: string; dynasty: string;
   first: string; tags: string[]; hasAnnotation: boolean;
 }
-interface Dimension { key: string; tag: string; content: string; citation: string }
+type DimKey = 'zici' | 'diangu' | 'qinggan' | 'geli';
+interface Dim { key: DimKey; tag: string; content: string; citation: string }
 interface RelatedPoem { id: string; title: string; author: string; dynasty: string }
-interface AnnotationResult {
-  dimensions: Dimension[];
-  related: RelatedPoem[];
-  hasBio: boolean;
-  latencyMs: number;
+interface Step { label: string; detail?: string }
+interface StreamState {
   model: string;
+  dims: Dim[];
+  related: RelatedPoem[];
+  steps: Step[];
+  phase: 'retrieve' | 'generate' | 'done';
+  latencyMs?: number;
 }
 
 const DYNASTY_CLASS: Record<string, string> = {
@@ -26,9 +31,11 @@ export function AnnotateView() {
   const [poems, setPoems] = useState<PoemItem[]>([]);
   const [selected, setSelected] = useState<PoemItem | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnnotationResult | null>(null);
+  const [stream, setStream] = useState<StreamState | null>(null);
   const [error, setError] = useState('');
   const [fav, setFav] = useState(false);
+  const fullRef = useRef('');
+  const [showSteps, setShowSteps] = useState(false);
   const { msg, show } = useToast();
 
   useEffect(() => {
@@ -45,16 +52,62 @@ export function AnnotateView() {
     if (!selected || loading) return;
     setLoading(true);
     setError('');
-    setResult(null);
+    setStream(null);
+    setShowSteps(false);
+    fullRef.current = '';
+
+    // 首个检索 step 可能早于 meta 到达，先建空骨架
+    const ensure = (patch: Partial<StreamState>): StreamState => ({
+      model: '', dims: [], related: [], steps: [], phase: 'retrieve', ...patch,
+    });
+
     try {
       const r = await fetch('/api/annotation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poemId: selected.id }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || '生成失败');
-      setResult(data);
+      if (!r.ok || !r.body) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || '生成失败');
+      }
+
+      for await (const { event, data } of sseEvents(r)) {
+        if (event === 'step') {
+          setStream((s) => {
+            const base = s ?? ensure({});
+            return { ...base, phase: 'retrieve', steps: [...base.steps, { label: data.label, detail: data.detail }] };
+          });
+        } else if (event === 'meta') {
+          setStream((s) => ({
+            ...ensure({ ...s }),
+            model: data.model,
+            dims: (data.dims as Omit<Dim, 'content'>[]).map((d) => ({ ...d, content: '' })),
+            related: data.related as RelatedPoem[],
+          }));
+        } else if (event === 'delta') {
+          fullRef.current += data.text || '';
+          const sec = parseAnnotationSections(fullRef.current);
+          setStream((s) =>
+            s
+              ? {
+                  ...s,
+                  phase: 'generate',
+                  dims: s.dims.map((d) => ({ ...d, content: sec[d.key] || '' })),
+                }
+              : s,
+          );
+        } else if (event === 'error') {
+          throw new Error(data.error || '生成失败');
+        } else if (event === 'done') {
+          setStream((s) =>
+            s
+              ? { ...s, phase: 'done', latencyMs: data.latencyMs, dims: data.dimensions as Dim[] }
+              : s,
+          );
+          show('AI注解完成');
+        }
+      }
     } catch (e: any) {
       setError(e.message || '网络异常，请重试');
     } finally {
@@ -76,12 +129,14 @@ export function AnnotateView() {
     }
   }
 
+  const isDone = stream?.phase === 'done';
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-brush text-3xl text-ink-black">AI智能注解</h1>
         <p className="mt-1.5 font-ui text-sm text-ink-soft">
-          RAG向量检索 · 引用追溯全链路，四维度解析诗词
+          知识库检索 · 引用追溯，先检索同意象诗篇与诗人小传，再四维度生成注解
         </p>
       </div>
 
@@ -94,7 +149,7 @@ export function AnnotateView() {
               value={selected?.id || ''}
               onChange={(e) => {
                 setSelected(poems.find((p) => p.id === e.target.value) || null);
-                setResult(null);
+                setStream(null);
                 setFav(false);
               }}
               className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
@@ -149,15 +204,15 @@ export function AnnotateView() {
             )}
           </div>
 
-          {/* RAG 引用追溯说明 */}
+          {/* 检索与引用追溯说明 */}
           <div className="paper-card p-5">
             <div className="flex items-center gap-2">
               <span className="pulse-dot" />
-              <span className="font-ui text-xs font-medium" style={{ color: '#6B8E7B' }}>RAG引用追溯</span>
+              <span className="font-ui text-xs font-medium" style={{ color: '#6B8E7B' }}>检索与引用追溯</span>
             </div>
             <p className="mt-2 font-ui text-xs leading-relaxed text-ink-soft">
-              每条注解由向量检索诗词库、意象共现库、诗人小传后生成，
-              底部标注真实引用出处，AI言之有据。
+              每条注解先检索意象共现诗篇与诗人小传作为上下文，再交由大模型生成，
+              卡片底部标注真实引用出处，AI 言之有据。
             </p>
           </div>
         </div>
@@ -167,27 +222,28 @@ export function AnnotateView() {
           <div className="paper-card flex min-h-[560px] flex-col p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-ui text-[15px] font-medium text-ink-deep">注解结果</h2>
-              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>
-                <span className={`h-1.5 w-1.5 rounded-full ${loading ? 'animate-pulse' : ''}`} style={{ background: '#6B8E7B' }} />
-                RAG引用追溯
-              </span>
+              {stream && (
+                <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${loading ? 'animate-pulse' : ''}`} style={{ background: '#6B8E7B' }} />
+                  {stream.phase === 'retrieve' ? '知识库检索中' : stream.phase === 'generate' ? 'AI 撰写中' : '引用可追溯'}
+                </span>
+              )}
             </div>
 
             {/* 空状态 */}
-            {!result && !loading && !error && (
+            {!stream && !loading && !error && (
               <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
                 <BookOpen className="h-12 w-12 text-ink-soft/40" strokeWidth={1.5} />
                 <p className="mt-4 font-ui text-sm text-ink-soft">选择一首诗词，点击「生成AI注解」</p>
-                <p className="mt-1 font-ui text-xs text-ink-soft/70">AI将输出字词释义 · 典故溯源 · 情感分析 · 格律分析</p>
+                <p className="mt-1 font-ui text-xs text-ink-soft/70">AI 将输出字词释义 · 典故溯源 · 情感分析 · 格律分析</p>
               </div>
             )}
 
-            {/* 加载中 */}
-            {loading && (
+            {/* 初始加载（首个 step 到达前） */}
+            {loading && !stream && (
               <div className="flex flex-1 flex-col items-center justify-center py-16">
                 <span className="spinner spinner-ink" style={{ width: 24, height: 24 }} />
-                <p className="mt-4 font-ui text-sm text-ink-soft">AI正在检索文献库…</p>
-                <p className="mt-1 font-ui text-xs text-ink-soft/70">RAG向量检索 → 诗人小传 → 意象共现 → 大模型生成</p>
+                <p className="mt-4 font-ui text-sm text-ink-soft">正在连接 AI 服务…</p>
               </div>
             )}
 
@@ -201,28 +257,80 @@ export function AnnotateView() {
               </div>
             )}
 
-            {/* 结果 */}
-            {result && (
-              <div className="flex-1 space-y-4 anim-fade-in">
-                {result.dimensions.map((d, i) => (
-                  <div key={d.key} className="rounded-lg p-4 anim-fade-up" style={{ borderLeft: '3px solid #8B7355', background: '#F5F2EC', animationDelay: `${i * 0.12}s` }}>
-                    <div className="mb-1.5 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
-                      <Sparkles className="h-3.5 w-3.5 text-sepia" /> {d.tag}
-                    </div>
-                    <p className="font-ui text-[15px] leading-relaxed text-ink-mid">{d.content}</p>
-                    <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-ui text-xs" style={{ border: '1px dashed #7B8EA1', color: '#7B8EA1', background: 'rgba(123,142,161,0.06)' }}>
-                      <LinkIcon className="h-3 w-3" /> {d.citation}
-                    </div>
-                  </div>
-                ))}
+            {stream && (
+              <div className="flex-1 space-y-4">
+                {/* 完成后可回看检索与思考过程 */}
+                {isDone && stream.steps.length > 0 && (
+                  <button
+                    onClick={() => setShowSteps((v) => !v)}
+                    className="font-ui text-xs text-muted-blue transition-ink hover:underline"
+                  >
+                    {showSteps ? '收起检索过程 ▲' : `查看 AI 检索与思考过程（${stream.steps.length} 步）▼`}
+                  </button>
+                )}
 
-                {result.related.length > 0 && (
+                {/* 思考过程：生成中实时展示，完成后可折叠回看 */}
+                {stream.steps.length > 0 && (loading || showSteps) && (
+                  <div className="rounded-lg p-4" style={{ background: 'rgba(123,142,161,0.06)', border: '1px dashed #C9CFD6' }}>
+                    <div className="mb-2.5 font-ui text-xs font-medium text-muted-blue">AI 检索与思考过程</div>
+                    <ul className="space-y-2">
+                      {stream.steps.map((st, i) => (
+                        <li key={i} className="flex items-start gap-2 font-ui text-xs">
+                          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#6B8E7B' }} />
+                          <span className="text-ink-mid">{st.label}</span>
+                          {st.detail && <span className="text-ink-soft/80">· {st.detail}</span>}
+                        </li>
+                      ))}
+                      {loading && (
+                        <li className="flex items-center gap-2 font-ui text-xs text-ink-soft">
+                          <span className="h-3.5 w-3.5 shrink-0" />
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#7B8EA1' }} />
+                            {stream.phase === 'retrieve' ? '正在检索知识库…' : '大模型正在撰写四维度注解…'}
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 四维度卡片（meta 到达后渲染，逐字流式） */}
+                {stream.dims.map((d) => {
+                  const active = loading && stream.phase === 'generate';
+                  return (
+                    <div
+                      key={d.key}
+                      className="rounded-lg p-4 anim-fade-up"
+                      style={{ borderLeft: '3px solid #8B7355', background: '#F5F2EC' }}
+                    >
+                      <div className="mb-1.5 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
+                        <Sparkles className="h-3.5 w-3.5 text-sepia" /> {d.tag}
+                      </div>
+                      {d.content ? (
+                        <p className="font-ui text-[15px] leading-relaxed text-ink-mid">
+                          {d.content}
+                          {active && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
+                        </p>
+                      ) : (
+                        <p className="font-ui text-[15px] leading-relaxed text-ink-soft/50">
+                          {loading ? '等待撰写…' : '（无内容）'}
+                        </p>
+                      )}
+                      <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-ui text-xs" style={{ border: '1px dashed #7B8EA1', color: '#7B8EA1', background: 'rgba(123,142,161,0.06)' }}>
+                        <LinkIcon className="h-3 w-3" /> {d.citation}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* 检索到的同意象诗篇（meta 到达即可见，体现先检索后生成） */}
+                {stream.related.length > 0 && (
                   <div className="rounded-lg p-4" style={{ border: '1px dashed #D4CFC5', background: 'rgba(123,142,161,0.05)' }}>
                     <div className="mb-2 flex items-center gap-1.5 font-ui text-xs font-medium text-muted-blue">
-                      <Network className="h-3.5 w-3.5" /> RAG检索到的同意象诗篇
+                      <Network className="h-3.5 w-3.5" /> 检索到的同意象参照诗篇
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {result.related.map((r) => (
+                      {stream.related.map((r) => (
                         <span key={r.id} className="rounded-full bg-white/70 px-3 py-1 font-ui text-xs text-ink-mid">
                           《{r.title}》 {r.author}
                         </span>
@@ -231,9 +339,11 @@ export function AnnotateView() {
                   </div>
                 )}
 
-                <p className="pt-1 text-right font-ui text-xs text-ink-soft/70">
-                  {result.model} · 耗时 {(result.latencyMs / 1000).toFixed(1)}s
-                </p>
+                {isDone && (
+                  <p className="pt-1 text-right font-ui text-xs text-ink-soft/70">
+                    {stream.model} · 耗时 {((stream.latencyMs ?? 0) / 1000).toFixed(1)}s
+                  </p>
+                )}
               </div>
             )}
           </div>

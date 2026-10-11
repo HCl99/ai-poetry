@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,8 @@ const STYLES: Record<string, { name: string; desc: string }> = {
 export async function POST(req: Request) {
   const session = await auth();
   const { text, style } = (await req.json()) as { text?: string; style?: string };
+
+  // 开流前的参数校验仍返回普通 JSON 错误，便于前端直接读取
   if (!text?.trim()) return Response.json({ error: '请输入现代文内容' }, { status: 400 });
   if (!style || !STYLES[style]) return Response.json({ error: '请选择风格' }, { status: 400 });
 
@@ -36,48 +39,73 @@ export async function POST(req: Request) {
 4. 平仄大致协调，偶数句押韵
 5. 只输出诗词正文（每句一行），不要标题、不要解释`;
 
+  const model = 'glm-4-flash';
   const t0 = Date.now();
-  try {
-    const resp = await client.chat.completions.create({
-      model: 'glm-4-flash',
-      messages: [
-        { role: 'system', content: '你是精通古典诗词创作的AI诗人。只输出诗词正文，不输出任何解释。' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.85,
-      max_tokens: 300,
-    });
-    const poem = (resp.choices[0]?.message?.content?.trim() || '')
-      .replace(/^```.*\n?/, '')
-      .replace(/```$/, '')
-      .trim();
-    const latencyMs = Date.now() - t0;
-    if (!poem) return Response.json({ error: '生成失败，请重试' }, { status: 502 });
 
-    /* 保存创作记录 + 学习记录 */
-    if (session?.user?.id) {
-      await prisma.creation.create({
-        data: {
-          userId: session.user.id,
-          style: s.name,
-          inputText: text.trim().slice(0, 500),
-          outputText: poem.slice(0, 1000),
-          model: 'glm-4-flash',
-        },
-      });
-      await prisma.history.create({
-        data: {
-          userId: session.user.id,
-          actionType: 'transfer',
-          title: `${s.name}创作`,
-          detail: text.trim().slice(0, 80),
-        },
-      });
-    }
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
+      try {
+        send('meta', { style: s.name, form: '七言绝句', model });
 
-    return Response.json({ poem, style: s.name, form: '七言绝句', latencyMs, model: 'glm-4-flash' });
-  } catch (e: any) {
-    console.error('transfer error', e?.message || e);
-    return Response.json({ error: 'AI生成失败，请重试' }, { status: 502 });
-  }
+        const resp = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: '你是精通古典诗词创作的AI诗人。只输出诗词正文，不输出任何解释。' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.85,
+          max_tokens: 300,
+          stream: true,
+        });
+
+        let full = '';
+        for await (const chunk of resp) {
+          const delta = chunk.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            full += delta;
+            send('delta', { text: delta });
+          }
+        }
+
+        const poem = full
+          .replace(/^```[^\n]*\n?/, '')
+          .replace(/```$/, '')
+          .trim();
+        if (!poem) throw new Error('empty output');
+
+        // 流结束后再一次性落库（创作记录 + 学习历史）
+        let saved = false;
+        if (session?.user?.id) {
+          await prisma.creation.create({
+            data: {
+              userId: session.user.id,
+              style: s.name,
+              inputText: text.trim().slice(0, 500),
+              outputText: poem.slice(0, 1000),
+              model,
+            },
+          });
+          await prisma.history.create({
+            data: {
+              userId: session.user.id,
+              actionType: 'transfer',
+              title: `${s.name}创作`,
+              detail: text.trim().slice(0, 80),
+            },
+          });
+          saved = true;
+        }
+
+        send('done', { poem, latencyMs: Date.now() - t0, saved });
+      } catch (e: any) {
+        console.error('transfer stream error', e?.message || e);
+        send('error', { error: 'AI生成失败，请重试' });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, { headers: SSE_HEADERS });
 }

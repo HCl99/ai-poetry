@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { sseEvents } from '@/lib/sse';
 
 const STYLES = [
   { key: 'libai', name: '李白体', hint: '浪漫飘逸 · 想象瑰奇' },
@@ -14,11 +15,16 @@ const STYLES = [
 
 const EXAMPLE = '下雨天一个人走回家，路上想起了远方的朋友';
 
+interface Meta { style: string; form: string; model: string }
+interface DoneInfo { latencyMs: number; saved: boolean }
+
 export function TransferView() {
   const [style, setStyle] = useState('sushi');
   const [text, setText] = useState(EXAMPLE);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ poem: string; style: string; form: string; latencyMs: number } | null>(null);
+  const [poem, setPoem] = useState('');
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [error, setError] = useState('');
   const { msg, show } = useToast();
 
@@ -27,17 +33,29 @@ export function TransferView() {
     if (!text.trim()) { show('请输入现代文内容'); return; }
     setLoading(true);
     setError('');
-    setResult(null);
+    setPoem('');
+    setMeta(null);
+    setDoneInfo(null);
     try {
       const r = await fetch('/api/transfer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, style }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || '生成失败');
-      setResult(data);
-      show('风格迁移完成');
+      if (!r.ok || !r.body) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || '生成失败');
+      }
+      for await (const { event, data } of sseEvents(r)) {
+        if (event === 'meta') setMeta(data);
+        else if (event === 'delta') setPoem((p) => p + (data.text || ''));
+        else if (event === 'error') throw new Error(data.error || '生成失败');
+        else if (event === 'done') {
+          setPoem(data.poem || '');
+          setDoneInfo({ latencyMs: data.latencyMs, saved: !!data.saved });
+          show('风格迁移完成');
+        }
+      }
     } catch (e: any) {
       setError(e.message || '网络异常，请重试');
     } finally {
@@ -45,12 +63,14 @@ export function TransferView() {
     }
   }
 
+  const hasOutput = poem.length > 0;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-brush text-3xl text-ink-black">风格迁移</h1>
         <p className="mt-1.5 font-ui text-sm text-ink-soft">
-          Agent六步推理：语义分析 → 意象提取 → 风格匹配 → 样本检索 → 生成初稿 → 格律校验
+          AI 提取现代文意象、匹配诗人语言风格，逐句炼字，实时生成古风诗词
         </p>
       </div>
 
@@ -106,37 +126,48 @@ export function TransferView() {
             style={{ background: 'linear-gradient(135deg,#7B8EA1,#5D5853)' }}
           >
             {loading ? <span className="spinner" style={{ width: 15, height: 15 }} /> : <Sparkles className="h-4 w-4" />}
-            {loading ? 'Agent推理中…' : '开始风格迁移'}
+            {loading ? '生成中…' : '开始风格迁移'}
           </button>
         </div>
 
-        {/* 右栏：生成结果 */}
+        {/* 右栏：生成结果（流式逐字） */}
         <div className="paper-card flex min-h-[420px] flex-col p-6">
           <h2 className="mb-4 font-ui text-[15px] font-medium text-ink-deep">生成结果</h2>
-          {loading && (
+
+          {loading && !hasOutput && (
             <div className="flex flex-1 flex-col items-center justify-center py-16">
               <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
-              <p className="mt-4 font-ui text-sm text-ink-soft">AI正在生成…</p>
-              <p className="mt-1 font-ui text-xs text-ink-soft/70">提取意象 → 匹配诗人风格 → 格律校验</p>
+              <p className="mt-4 font-ui text-sm text-ink-soft">AI 正在涵泳构思…</p>
+              <p className="mt-1 font-ui text-xs text-ink-soft/70">提炼意象 · 匹配风格 · 逐句炼字</p>
             </div>
           )}
-          {!loading && !result && (
+
+          {!loading && !hasOutput && (
             <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
               <Sparkles className="h-12 w-12 text-ink-soft/40" strokeWidth={1.5} />
               <p className="mt-4 font-ui text-sm text-ink-soft">选择风格，输入现代文，点击「开始风格迁移」</p>
-              <p className="mt-1 font-ui text-xs text-ink-soft/70">AI将把白话转化为对应诗人的古风诗词</p>
+              <p className="mt-1 font-ui text-xs text-ink-soft/70">AI 将逐句把白话转化为对应诗人的古风诗词</p>
             </div>
           )}
-          {!loading && result && (
+
+          {hasOutput && (
             <div className="flex flex-1 flex-col anim-fade-in">
               <div className="flex flex-1 items-center justify-center rounded-lg p-8" style={{ background: '#F5F2EC' }}>
                 <p className="whitespace-pre-line text-center font-serif text-lg leading-[2.6] text-ink-deep">
-                  {result.poem}
+                  {poem}
+                  {loading && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
                 </p>
               </div>
               <div className="mt-4 flex items-center justify-between font-ui text-xs text-ink-soft">
-                <span>{result.style} · {result.form}</span>
-                <span>glm-4-flash · {(result.latencyMs / 1000).toFixed(1)}s · 已存入我的创作</span>
+                <span>{meta?.style ?? ''} · {meta?.form ?? '古诗词'}</span>
+                {doneInfo ? (
+                  <span>{meta?.model ?? 'glm-4-flash'} · {(doneInfo.latencyMs / 1000).toFixed(1)}s · {doneInfo.saved ? '已存入我的创作' : '未登录，未保存'}</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#6B8E7B' }} />
+                    流式生成中
+                  </span>
+                )}
               </div>
             </div>
           )}

@@ -1,0 +1,184 @@
+// AI 古诗词文化探索平台 - Prisma Schema
+// 映射 MySQL schema.sql 中的 8 张表 + users 表（鉴权用）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 诗篇主表
+model Poem {
+  id             String  @id @db.Char(36)
+  title          String  @db.VarChar(255)
+  author         String  @db.VarChar(64)
+  dynasty        String  @db.VarChar(16) @default("唐")
+  paragraphs     Json
+  paragraphsSimp Json?  @map("paragraphs_simp")
+  tags           Json?
+  sourceFile     String? @map("source_file") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  annotations Annotation?
+  poemImagery  PoemImagery[]
+  chunks       Chunk[]
+
+  @@index([author], map: "idx_poems_author")
+  @@index([dynasty], map: "idx_poems_dynasty")
+  @@map("poems")
+}
+
+// 赏析表
+model Annotation {
+  poemId    String  @id @map("poem_id") @db.Char(36)
+  fanyi     String? @db.MediumText
+  shangxi   String? @db.MediumText
+  zhushihui String? @db.MediumText
+  source    String  @default("AI生成(GLM-4-Flash)") @db.VarChar(64)
+  model     String? @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  poem Poem @relation(fields: [poemId], references: [id], onDelete: Cascade, map: "fk_annotations_poem")
+
+  @@map("annotations")
+}
+
+// 诗人小传
+model PoetBio {
+  id        String   @id @db.Char(36)
+  name      String   @db.VarChar(64)
+  dynasty   String   @db.VarChar(16) @default("唐")
+  bioDesc   String?  @map("bio_desc") @db.MediumText
+  bioSimp   String?  @map("bio_simp") @db.MediumText
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([name], map: "idx_poet_bios_name")
+  @@map("poet_bios")
+}
+
+// 意象清单
+model Imagery {
+  char  String @id @db.Char(4)
+  count Int    @default(0)
+
+  @@map("imagery")
+}
+
+// 诗-意象关联
+model PoemImagery {
+  poemId      String  @map("poem_id") @db.Char(36)
+  imageryChar String  @map("imagery_char") @db.Char(4)
+  lineText    String? @map("line_text") @db.VarChar(500)
+
+  poem Poem @relation(fields: [poemId], references: [id], onDelete: Cascade, map: "fk_pi_poem")
+
+  @@id([poemId, imageryChar])
+  @@index([imageryChar], map: "idx_pi_char")
+  @@map("poem_imagery")
+}
+
+// 意象共现边
+model ImageryCooccurrence {
+  sourceChar String @map("source_char") @db.Char(4)
+  targetChar String @map("target_char") @db.Char(4)
+  weight     Int
+
+  @@id([sourceChar, targetChar])
+  @@map("imagery_cooccurrence")
+}
+
+// RAG 文本切片
+model Chunk {
+  id        BigInt   @id @default(autoincrement())
+  poemId    String   @map("poem_id") @db.Char(36)
+  chunkType String   @map("chunk_type") @db.VarChar(16)
+  text      String   @db.MediumText
+  embedding String?  @db.LongText
+  createdAt DateTime @default(now()) @map("created_at")
+
+  poem Poem @relation(fields: [poemId], references: [id], onDelete: Cascade, map: "fk_chunks_poem")
+
+  @@index([poemId], map: "idx_chunks_poem")
+  @@index([chunkType], map: "idx_chunks_type")
+  @@map("chunks")
+}
+
+// 注解查询日志
+model AnnotationLog {
+  id              BigInt   @id @default(autoincrement())
+  userQuery       String?  @map("user_query") @db.Text
+  poemId          String?  @map("poem_id") @db.Char(36)
+  retrievedChunks Json?    @map("retrieved_chunks")
+  answer          String?  @db.MediumText
+  model           String?  @db.VarChar(32)
+  latencyMs       Int?     @map("latency_ms")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("annotation_logs")
+}
+
+// 用户表（鉴权）
+model User {
+  id           String   @id @default(uuid()) @db.Char(36)
+  email        String   @unique @db.VarChar(255)
+  name         String?  @db.VarChar(64)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+// 收藏
+model Favorite {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Char(36)
+  poemId    String   @map("poem_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, poemId], map: "uk_user_poem")
+  @@map("favorites")
+}
+
+// 学习记录
+model History {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Char(36)
+  actionType String   @map("action_type") @db.VarChar(24)
+  targetId   String?  @map("target_id") @db.VarChar(64)
+  title      String?  @db.VarChar(255)
+  detail     String?  @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_hist_user")
+  @@map("histories")
+}
+
+// 风格迁移创作
+model Creation {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Char(36)
+  style      String   @db.VarChar(24)
+  inputText  String   @map("input_text") @db.Text
+  outputText String   @map("output_text") @db.Text
+  model      String?  @db.VarChar(32)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_creation_user")
+  @@map("creations")
+}
+
+// 诗词笔记
+model Note {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Char(36)
+  poemId    String?  @map("poem_id") @db.Char(36)
+  title     String?  @db.VarChar(255)
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_note_user")
+  @@map("notes")
+}

@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 墨韵诗心 · 水墨Pastel设计系统 ===== */
+:root {
+  /* 墨色系 */
+  --ink-black: #2C2C2C;
+  --ink-deep: #3A3835;
+  --ink-mid: #5D5853;
+  --ink-soft: #8B857E;
+  /* 纸色系 */
+  --paper: #F5F2EC;
+  --paper-light: #FAF8F3;
+  --paper-dark: #EAE4D8;
+  /* 辅助色 */
+  --sepia: #8B7355;
+  --rose: #A67C7C;
+  --sage: #6B8E7B;
+  --muted-blue: #7B8EA1;
+  --gold-wash: #C4A965;
+  /* 边框与阴影 */
+  --border-c: #D4CFC5;
+  --border-light: #E5DFD4;
+  --shadow: 0 2px 24px rgba(60, 50, 40, 0.06);
+  --shadow-hover: 0 8px 40px rgba(60, 50, 40, 0.12);
+
+  /* shadcn 变量映射 */
+  --background: 40 36% 94%;
+  --foreground: 35 5% 22%;
+  --card: 41 41% 97%;
+  --card-foreground: 35 5% 22%;
+  --popover: 41 41% 97%;
+  --popover-foreground: 35 5% 22%;
+  --primary: 35 5% 22%;
+  --primary-foreground: 40 36% 97%;
+  --secondary: 39 30% 88%;
+  --secondary-foreground: 35 5% 22%;
+  --muted: 39 28% 90%;
+  --muted-foreground: 33 5% 52%;
+  --accent: 39 30% 88%;
+  --accent-foreground: 35 5% 22%;
+  --destructive: 0 20% 57%;
+  --destructive-foreground: 40 36% 97%;
+  --border: 38 14% 80%;
+  --input: 38 14% 80%;
+  --ring: 35 5% 35%;
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', STSong, serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(123, 142, 161, 0.10), transparent),
+      radial-gradient(ellipse 60% 40% at 90% 110%, rgba(139, 115, 85, 0.07), transparent);
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: rgba(107, 142, 123, 0.25);
+  }
+}
+
+@layer utilities {
+  .font-brush {
+    font-family: 'Ma Shan Zheng', 'Noto Serif SC', serif;
+  }
+  .font-ui {
+    font-family: 'Noto Sans SC', system-ui, sans-serif;
+  }
+  .text-ink-black { color: #2C2C2C; }
+  .text-ink-deep { color: #3A3835; }
+  .text-ink-mid { color: #5D5853; }
+  .text-ink-soft { color: #8B857E; }
+  .text-sepia { color: #8B7355; }
+  .text-rose-c { color: #A67C7C; }
+  .text-sage { color: #6B8E7B; }
+  .text-muted-blue { color: #7B8EA1; }
+  .text-gold { color: #C4A965; }
+  .bg-sepia { background-color: #8B7355; }
+  .bg-sage { background-color: #6B8E7B; }
+  .bg-rose-c { background-color: #A67C7C; }
+  .bg-muted-blue { background-color: #7B8EA1; }
+  .bg-gold { background-color: #C4A965; }
+  .shadow-ink { box-shadow: 0 2px 24px rgba(60, 50, 40, 0.06); }
+  .shadow-ink-hover { box-shadow: 0 8px 40px rgba(60, 50, 40, 0.12); }
+  .transition-ink {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .glass {
+    background: rgba(245, 242, 236, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .glass-strong {
+    background: rgba(245, 242, 236, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+  .brand-gradient {
+    background: linear-gradient(135deg, #7B8EA1 0%, #5D5853 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .ink-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(60, 50, 40, 0.18) 30%, rgba(60, 50, 40, 0.18) 70%, transparent);
+  }
+}
+
+@layer components {
+  .paper-card {
+    background: #FAF8F3;
+    border: 1px solid #E5DFD4;
+    border-radius: 12px;
+    box-shadow: 0 2px 24px rgba(60, 50, 40, 0.06);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .paper-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 40px rgba(60, 50, 40, 0.12);
+  }
+  .dynasty-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .dynasty-tang { background: rgba(139, 115, 85, 0.15); color: #8B7355; }
+  .dynasty-song { background: rgba(107, 142, 123, 0.15); color: #6B8E7B; }
+  .dynasty-yuan { background: rgba(166, 124, 124, 0.15); color: #A67C7C; }
+  .dynasty-mingqing { background: rgba(123, 142, 161, 0.15); color: #7B8EA1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes spinKf {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulseDotKf {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+@keyframes floatDrift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.anim-fade-up { animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.anim-fade-in { animation: fadeIn 0.5s ease-out both; }
+.anim-scale-in { animation: scaleIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.anim-float { animation: floatDrift 6s ease-in-out infinite; }
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spinKf 0.8s linear infinite;
+}
+.spinner-ink {
+  border-color: rgba(58, 56, 53, 0.2);
+  border-top-color: #3A3835;
+}
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6B8E7B;
+  animation: pulseDotKf 1.6s ease-in-out infinite;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1), transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}

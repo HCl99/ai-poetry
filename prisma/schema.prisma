@@ -90,17 +90,19 @@ model ImageryCooccurrence {
   @@map("imagery_cooccurrence")
 }
 
-// RAG 文本切片
+// RAG 文本切片（poem 向量 ref_id=poem_id；bio 向量 ref_id=poet_bios.id）
 model Chunk {
   id        BigInt   @id @default(autoincrement())
-  poemId    String   @map("poem_id") @db.Char(36)
+  poemId    String?  @map("poem_id") @db.Char(36)
+  refId     String?  @map("ref_id") @db.VarChar(64)
   chunkType String   @map("chunk_type") @db.VarChar(16)
   text      String   @db.MediumText
   embedding String?  @db.LongText
   createdAt DateTime @default(now()) @map("created_at")
 
-  poem Poem @relation(fields: [poemId], references: [id], onDelete: Cascade, map: "fk_chunks_poem")
+  poem Poem? @relation(fields: [poemId], references: [id], onDelete: Cascade, map: "fk_chunks_poem")
 
+  @@unique([chunkType, refId], map: "uk_chunks_ref")
   @@index([poemId], map: "idx_chunks_poem")
   @@index([chunkType], map: "idx_chunks_type")
   @@map("chunks")

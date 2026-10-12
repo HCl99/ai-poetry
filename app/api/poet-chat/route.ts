@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,8 @@ const client = new OpenAI({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const limited = checkAiRateLimit(session.user.id, 'poet-chat', 12);
+  if (limited) return limited;
 
   const { poet, message, history } = (await req.json()) as {
     poet?: string;

@@ -4,6 +4,7 @@ import { embedText } from '@/lib/embedding';
 import { topKSimilar } from '@/lib/vectorStore';
 import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,8 @@ const STYLES: Record<string, { name: string; desc: string; author: string }> = {
 
 export async function POST(req: Request) {
   const session = await auth();
+  const limited = checkAiRateLimit(session?.user?.id || 'anon', 'transfer', 6);
+  if (limited) return limited;
   const { text, style } = (await req.json()) as { text?: string; style?: string };
 
   // 开流前的参数校验仍返回普通 JSON 错误，便于前端直接读取

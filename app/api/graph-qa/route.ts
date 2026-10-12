@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,8 @@ type Row = { s: string; t: string; w: number };
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const limited = checkAiRateLimit(session.user.id, 'graph-qa', 10);
+  if (limited) return limited;
 
   const { kind, question } = (await req.json()) as { kind?: 'poet' | 'imagery'; question?: string };
   if (!question?.trim()) return Response.json({ error: '缺少 question' }, { status: 400 });

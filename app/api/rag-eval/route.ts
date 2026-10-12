@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { retrieveForPoem } from '@/lib/poemRetrieve';
 import { checkCitations } from '@/lib/citationCheck';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import { parseAnnotationSections, withFallback } from '@/lib/sections';
 import OpenAI from 'openai';
 
@@ -21,6 +22,9 @@ const client = new OpenAI({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  // 批量评测单次已含 N 个样本的多次 AI 调用，窗口收紧
+  const limited = checkAiRateLimit(session.user.id, 'rag-eval', 2);
+  if (limited) return limited;
 
   const { sampleSize } = (await req.json().catch(() => ({}))) as { sampleSize?: number };
   const n = Math.min(Math.max(sampleSize || 5, 2), 8);

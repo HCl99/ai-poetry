@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { retrieveForPoem } from '@/lib/poemRetrieve';
 import { checkCitations } from '@/lib/citationCheck';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import { parseAnnotationSections, withFallback } from '@/lib/sections';
 import OpenAI from 'openai';
 
@@ -28,6 +29,8 @@ function stripThink(s: string): string {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const limited = checkAiRateLimit(session.user.id, 'compare-annot', 5);
+  if (limited) return limited;
 
   const { poemId } = (await req.json()) as { poemId?: string };
   if (!poemId) return Response.json({ error: '缺少 poemId' }, { status: 400 });

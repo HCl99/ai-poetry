@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -7,6 +8,8 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const limited = checkAiRateLimit(session.user.id, 'inkpaint', 6);
+  if (limited) return limited;
 
   const { prompt } = (await req.json()) as { prompt?: string };
   if (!prompt?.trim()) return Response.json({ error: '缺少 prompt' }, { status: 400 });

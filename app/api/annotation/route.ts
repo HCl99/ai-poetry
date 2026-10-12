@@ -4,6 +4,7 @@ import { embedText } from '@/lib/embedding';
 import { hybridCoarse, vectorCorpusSize, type VectorHit } from '@/lib/vectorStore';
 import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
 import OpenAI from 'openai';
 
@@ -18,6 +19,8 @@ const client = new OpenAI({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const limited = checkAiRateLimit(session.user.id, 'annotation', 10);
+  if (limited) return limited;
 
   const { poemId, question, history } = (await req.json()) as {
     poemId?: string;

@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { checkAiRateLimit } from '@/lib/rateLimit';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,8 @@ function lineContaining(val: unknown, char: string): string | null {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const limited = checkAiRateLimit(session.user.id, 'feihua', 12);
+  if (limited) return limited;
 
   const { char, played, playerLine } = (await req.json()) as { char?: string; played?: string[]; playerLine?: string };
   if (!char || !/^[\u4e00-\u9fa5]$/.test(char)) return Response.json({ error: '令字必须是单个汉字' }, { status: 400 });

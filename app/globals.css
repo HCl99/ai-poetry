@@ -216,6 +216,13 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.8); }
 }
+@keyframes pulseRing {
+  0% { box-shadow: 0 0 0 0 rgba(166, 124, 124, 0.45); }
+  70% { box-shadow: 0 0 0 10px rgba(166, 124, 124, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(166, 124, 124, 0); }
+}
+.anim-pulse-ring { animation: pulseRing 1.4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .anim-pulse-ring { animation: none; } }
 @keyframes floatDrift {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-12px); }

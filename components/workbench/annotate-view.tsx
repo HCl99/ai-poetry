@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2 } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
@@ -67,6 +67,9 @@ export function AnnotateView() {
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const shareRef = useRef<HTMLDivElement>(null);
+  // 语音念诗搜索：Web Speech Recognition，念诗题/作者即可定位诗篇
+  const [listening, setListening] = useState(false);
+  const recogRef = useRef<any>(null);
 
   /** 中断当前流式生成，已流式内容保留 */
   function stopGenerate() {
@@ -112,7 +115,56 @@ export function AnnotateView() {
         if (list.length) setSelected(list[0]);
       })
       .catch(() => setError('诗词列表加载失败'));
+    // 卸载时终止语音识别
+    return () => recogRef.current?.abort?.();
   }, []);
+
+  /** 语音念诗：识别 → 检索 → 定位诗篇（与朗读输出构成语音闭环） */
+  function startVoiceSearch() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { show('当前浏览器不支持语音识别，请使用 Chrome / Edge'); return; }
+    if (listening) { recogRef.current?.stop(); setListening(false); return; }
+    const recog = new SR();
+    recogRef.current = recog;
+    recog.lang = 'zh-CN';
+    recog.interimResults = false;
+    recog.maxAlternatives = 1;
+    recog.onresult = (e: any) => {
+      const text = (e.results?.[0]?.[0]?.transcript as string || '').trim();
+      setListening(false);
+      if (text) voiceSearch(text);
+    };
+    recog.onerror = (e: any) => {
+      setListening(false);
+      if (e?.error === 'not-allowed') show('麦克风权限被拒绝，请在浏览器中允许');
+      else if (e?.error === 'no-speech') show('未听到声音，请再念一次');
+      else show('语音识别失败，请重试');
+    };
+    recog.onend = () => setListening(false);
+    setListening(true);
+    show('请念诗题或作者…');
+    try { recog.start(); } catch { setListening(false); }
+  }
+
+  async function voiceSearch(text: string) {
+    try {
+      const r = await fetch(`/api/poems/list?q=${encodeURIComponent(text)}&limit=10`);
+      const list: PoemItem[] = await r.json();
+      if (!list.length) { show(`未找到「${text}」相关诗篇，可念诗题或作者名`); return; }
+      // 命中结果并入候选列表并选中，念完即可 Enter 生成注解
+      setPoems((prev) => {
+        const ids = new Set(prev.map((p) => p.id));
+        return [...list.filter((p) => !ids.has(p.id)), ...prev];
+      });
+      abortRef.current?.abort();
+      setSelected(list[0]);
+      setStream(null);
+      setFav(false);
+      show(`识别到「${text}」· 已定位《${list[0].title}》，按 Enter 生成注解`);
+    } catch {
+      show('语音搜索失败，请重试');
+    }
+  }
 
   async function generate() {
     if (!selected || loading) return;
@@ -272,22 +324,36 @@ export function AnnotateView() {
         <div className="space-y-5 lg:col-span-2">
           <div className="paper-card p-6">
             <h2 className="mb-3 font-ui text-[15px] font-medium text-ink-deep">选择诗词</h2>
-            <select
-              value={selected?.id || ''}
-              onChange={(e) => {
-                abortRef.current?.abort();
-                setSelected(poems.find((p) => p.id === e.target.value) || null);
-                setStream(null);
-                setFav(false);
-              }}
-              className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
-            >
-              {poems.map((p) => (
-                <option key={p.id} value={p.id}>
-                  《{p.title}》 {p.author}{p.hasAnnotation ? ' · 已有赏析' : ''}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={selected?.id || ''}
+                onChange={(e) => {
+                  abortRef.current?.abort();
+                  setSelected(poems.find((p) => p.id === e.target.value) || null);
+                  setStream(null);
+                  setFav(false);
+                }}
+                className="h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
+              >
+                {poems.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    《{p.title}》 {p.author}{p.hasAnnotation ? ' · 已有赏析' : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={startVoiceSearch}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-ink ${listening ? 'anim-pulse-ring' : 'hover:bg-paper-dark'}`}
+                style={listening ? { background: 'var(--rose)', color: '#fff' } : { background: 'var(--inset)', color: 'var(--ink-mid)' }}
+                title={listening ? '正在聆听，再次点击取消' : '语音念诗：念诗题或作者即可定位'}
+                aria-label="语音念诗搜索"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mt-1.5 font-ui text-xs text-ink-soft">
+              {listening ? '正在聆听…请念诗题或作者' : '支持语音念诗：点麦克风念「静夜思」或「李白」试试'}
+            </p>
 
             {selected && (
               <>

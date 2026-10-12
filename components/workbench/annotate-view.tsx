@@ -259,7 +259,15 @@ export function AnnotateView() {
 
             {selected && (
               <>
-                <div className="mt-5 rounded-lg p-6" style={{ background: '#F5F2EC' }}>
+                <div className="relative mt-5 rounded-lg p-6" style={{ background: '#F5F2EC' }}>
+                  <button
+                    onClick={() => speak('poem', `${selected.title}。${selected.dynasty}代，${selected.author}。${selected.first}`)}
+                    className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-white/70 hover:text-ink-deep"
+                    title="朗读原诗"
+                  >
+                    {speakingKey === 'poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                    {speakingKey === 'poem' ? '停止' : '朗读'}
+                  </button>
                   <div className="text-center">
                     <span className={`dynasty-tag ${DYNASTY_CLASS[selected.dynasty] || 'dynasty-tang'}`}>{selected.dynasty}</span>
                     <h3 className="mt-2 font-brush text-2xl text-ink-deep">{selected.title}</h3>

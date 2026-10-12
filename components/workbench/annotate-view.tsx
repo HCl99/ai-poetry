@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
@@ -15,6 +15,7 @@ type DimKey = 'zici' | 'diangu' | 'qinggan' | 'geli';
 interface Dim { key: DimKey; tag: string; content: string; citation: string }
 interface RelatedPoem { id: string; title: string; author: string; dynasty: string; score?: number | null }
 interface Step { label: string; detail?: string }
+interface Followup { q: string; a: string; related: RelatedPoem[]; done: boolean }
 interface StreamState {
   model: string;
   dims: Dim[];
@@ -70,6 +71,11 @@ export function AnnotateView() {
   // 语音念诗搜索：Web Speech Recognition，念诗题/作者即可定位诗篇
   const [listening, setListening] = useState(false);
   const recogRef = useRef<any>(null);
+  // 多轮追问：每次追问独立检索知识库，引用硬约束与主注解一致
+  const [followups, setFollowups] = useState<Followup[]>([]);
+  const [fuInput, setFuInput] = useState('');
+  const [fuLoading, setFuLoading] = useState(false);
+  const fuAbortRef = useRef<AbortController | null>(null);
 
   /** 中断当前流式生成，已流式内容保留 */
   function stopGenerate() {
@@ -77,12 +83,12 @@ export function AnnotateView() {
   }
 
   // 卸载时中断未完成的请求
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => { abortRef.current?.abort(); fuAbortRef.current?.abort(); }, []);
 
-  // 快捷键：Enter 生成注解，Esc 停止生成
+  // 快捷键：Enter 生成注解，Esc 停止生成/追问
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { abortRef.current?.abort(); return; }
+      if (e.key === 'Escape') { abortRef.current?.abort(); fuAbortRef.current?.abort(); return; }
       if (e.key !== 'Enter' || e.isComposing) return;
       const t = e.target as HTMLElement | null;
       if (t && ['TEXTAREA', 'INPUT', 'SELECT', 'BUTTON'].includes(t.tagName)) return;
@@ -170,6 +176,7 @@ export function AnnotateView() {
       abortRef.current?.abort();
       setSelected(list[0]);
       setStream(null);
+      setFollowups([]);
       setFav(false);
       show(`识别到「${text}」· 已定位《${list[0].title}》，按 Enter 生成注解`);
     } catch {
@@ -184,6 +191,7 @@ export function AnnotateView() {
     setLoading(true);
     setError('');
     setStream(null);
+    setFollowups([]);
     setShowSteps(false);
     setSpeakingKey(null);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
@@ -252,6 +260,63 @@ export function AnnotateView() {
       setError(e.message || '网络异常，请重试');
     } finally {
       setLoading(false);
+    }
+  }
+
+  /** 多轮追问：独立检索 + 引用硬约束，流式回答，可中途停止 */
+  async function sendFollowup(question?: string) {
+    const q = (question ?? fuInput).trim();
+    if (!selected || !q || fuLoading) return;
+    setFuInput('');
+    const entry: Followup = { q, a: '', related: [], done: false };
+    setFollowups((prev) => [...prev, entry]);
+    const ctrl = new AbortController();
+    fuAbortRef.current = ctrl;
+    setFuLoading(true);
+    let acc = '';
+    const update = (patch: Partial<Followup>) =>
+      setFollowups((prev) => prev.map((f, i) => (i === prev.length - 1 ? { ...f, ...patch } : f)));
+    try {
+      const r = await fetch('/api/annotation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poemId: selected.id,
+          question: q,
+          // 此前问答作为上下文（不含本次问题，本次作为 question 独立检索）
+          history: followups.flatMap((f) => [
+            { role: 'user', content: f.q },
+            { role: 'assistant', content: f.a },
+          ]),
+        }),
+        signal: ctrl.signal,
+      });
+      if (!r.ok || !r.body) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || '追问失败');
+      }
+      for await (const { event, data } of sseEvents(r)) {
+        if (event === 'delta') {
+          acc += data.text || '';
+          update({ a: acc });
+        } else if (event === 'meta') {
+          update({ related: data.related as RelatedPoem[] });
+        } else if (event === 'error') {
+          throw new Error(data.error || '追问失败');
+        } else if (event === 'done') {
+          update({ related: (data.related as RelatedPoem[]) || [], done: true });
+        }
+      }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        update({ done: true });
+        show('已停止追问，保留已生成内容');
+        return;
+      }
+      update({ done: true });
+      show(e?.message || '追问失败，请重试');
+    } finally {
+      setFuLoading(false);
     }
   }
 
@@ -342,6 +407,7 @@ export function AnnotateView() {
                   abortRef.current?.abort();
                   setSelected(poems.find((p) => p.id === e.target.value) || null);
                   setStream(null);
+                  setFollowups([]);
                   setFav(false);
                 }}
                 className="h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
@@ -598,6 +664,55 @@ export function AnnotateView() {
                           {r.score != null && <span className="ml-1 text-sepia">{(r.score * 100).toFixed(0)}%</span>}
                         </span>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {isDone && (
+                  <div className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
+                    <div className="mb-3 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
+                      <MessagesSquare className="h-3.5 w-3.5 text-muted-blue" /> 多轮追问 · 每次追问独立检索知识库，引用同样可追溯
+                    </div>
+                    <div className="space-y-3">
+                      {followups.map((f, i) => (
+                        <div key={i} className="space-y-2">
+                          <div className="flex justify-end">
+                            <span className="max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 font-ui text-sm" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>{f.q}</span>
+                          </div>
+                          <div className="rounded-lg p-3 font-ui text-sm leading-relaxed text-ink-mid" style={{ borderLeft: '3px solid #6B8E7B', background: 'var(--paper-light)' }}>
+                            {f.a ? (
+                              renderWithCitations(f.a, f.related)
+                            ) : (
+                              <span className="inline-block spinner spinner-ink" style={{ width: 14, height: 14 }} />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {['诗中用了哪些典故？', '作者写这首诗有何背景？', '与之唱和的名篇还有哪些？'].map((c) => (
+                        <button key={c} disabled={fuLoading} onClick={() => sendFollowup(c)} className="rounded-full border border-c bg-white/70 px-3 py-1 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-50">
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={fuInput}
+                        onChange={(e) => setFuInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !(e.nativeEvent as KeyboardEvent).isComposing) sendFollowup(); }}
+                        placeholder="继续追问这首诗…（Enter 发送，Esc 停止）"
+                        className="h-10 min-w-0 flex-1 rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
+                      />
+                      {fuLoading ? (
+                        <button onClick={() => fuAbortRef.current?.abort()} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-4 font-ui text-xs font-medium transition-ink" style={{ background: 'var(--rose)', color: '#fff' }}>
+                          <Square className="h-3.5 w-3.5" /> 停止
+                        </button>
+                      ) : (
+                        <button onClick={() => sendFollowup()} disabled={!fuInput.trim()} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-4 font-ui text-xs font-medium transition-ink disabled:opacity-50" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
+                          追问
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

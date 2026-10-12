@@ -19,7 +19,11 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
 
-  const { poemId } = (await req.json()) as { poemId?: string };
+  const { poemId, question, history } = (await req.json()) as {
+    poemId?: string;
+    question?: string;
+    history?: { role: 'user' | 'assistant'; content: string }[];
+  };
   if (!poemId) return Response.json({ error: '缺少 poemId' }, { status: 400 });
 
   const poem = await prisma.poem.findUnique({
@@ -35,6 +39,140 @@ export async function POST(req: Request) {
 
   const model = 'glm-4-flash';
   const t0 = Date.now();
+
+  /* ================= 多轮追问模式：针对问题独立检索，引用硬约束与主注解一致 ================= */
+  if (question?.trim()) {
+    const q = question.trim().slice(0, 120);
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
+        try {
+          send('step', { label: '解析追问意图', detail: q });
+
+          // 以问题为主查询、原诗为背景，混合检索（与主注解同一检索链路）
+          const queryText = `${q}（《${poem.title}》${poem.author}：${orig.replace(/\n/g, '').slice(0, 120)}）`.slice(0, 400);
+          const queryVec = await embedText(queryText);
+          const corpusSize = await vectorCorpusSize();
+          const useVector = !!queryVec && corpusSize > 0;
+
+          type RelatedPoem = { id: string; title: string; author: string; dynasty: string; body: string; score: number | null; rerankScore?: number };
+          let related: RelatedPoem[] = [];
+          if (useVector) {
+            const coarse = await hybridCoarse(queryText, queryVec!, 20, {
+              excludeId: poemId,
+              filter: (m) => !(m.title === poem.title && m.author === poem.author),
+            });
+            if (coarse.length) {
+              const bodies = await prisma.poem.findMany({
+                where: { id: { in: coarse.map((h) => h.id) } },
+                select: { id: true, paragraphsSimp: true },
+              });
+              const bodyMap = new Map(bodies.map((b) => [b.id, ((b.paragraphsSimp as string[] | null) || []).join('')]));
+              const reranked = await rerankTopN(
+                queryText,
+                coarse.map((h) => ({ ...h, body: bodyMap.get(h.id) || '' })),
+                (item) => `《${item.title}》${item.author}：${item.body}`,
+                5,
+              );
+              related = reranked
+                ? reranked.map((r) => ({ ...r.item, rerankScore: r.score }))
+                : coarse.slice(0, 5).map((h) => ({ ...h, body: bodyMap.get(h.id) || '', score: h.score }));
+            }
+          }
+          if (related.length === 0) {
+            const imageryRows = await prisma.poemImagery.findMany({
+              where: { poemId },
+              orderBy: { imageryChar: 'asc' },
+              take: 3,
+            });
+            const chars = imageryRows.map((r) => r.imageryChar);
+            if (chars.length) {
+              const rows = await prisma.poemImagery.findMany({
+                where: { imageryChar: { in: chars }, NOT: { poemId } },
+                take: 8,
+                include: { poem: { select: { id: true, title: true, author: true, dynasty: true, paragraphsSimp: true } } },
+              });
+              const seen = new Set<string>();
+              related = rows
+                .filter((r) => !seen.has(r.poemId) && seen.add(r.poemId))
+                .slice(0, 5)
+                .map((r) => ({
+                  id: r.poem.id, title: r.poem.title, author: r.poem.author, dynasty: r.poem.dynasty,
+                  body: ((r.poem.paragraphsSimp as string[] | null) || []).join(''), score: null,
+                }));
+            }
+          }
+          const bio = await prisma.poetBio.findFirst({ where: { name: poem.author } });
+          send('step', {
+            label: '追问检索完成',
+            detail: related.length ? `命中 ${related.length} 篇相似诗篇${bio ? ' · 诗人小传已载入' : ''}` : '未检索到相似诗篇',
+          });
+
+          const relatedCtx = related.map((r) => `《${r.title}》〔${r.dynasty}〕${r.author}：${r.body}`).join('\n');
+          const bioCtx = bio?.bioSimp?.slice(0, 260) || bio?.bioDesc?.slice(0, 260) || '';
+          const relatedMeta = related.map((r) => ({ id: r.id, title: r.title, author: r.author, dynasty: r.dynasty, score: r.score }));
+          send('meta', { model, related: relatedMeta });
+
+          // 对话历史仅保留最近 6 条，内容截断防超长
+          const histMsgs = (history || [])
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .slice(-6)
+            .map((m) => ({ role: m.role as 'user' | 'assistant', content: (m.content || '').slice(0, 500) }));
+
+          const fuPrompt = `【诗词】《${poem.title}》〔${poem.dynasty}〕${poem.author}
+${orig}
+
+【知识库检索结果】
+${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `相似诗篇：\n${relatedCtx}\n` : '（无）'}
+
+【用户追问】${q}
+
+请围绕这首诗回答上述追问，180字以内，口语化但保持学术严谨。${relatedCtx ? '如需引用其他诗篇作为论据，仅允许引用上述检索结果列表中的诗题并以《诗题》标注，严禁杜撰或引用列表之外的诗篇。' : '如无可靠依据请直说，不要编造。'}`;
+
+          const resp = await client.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: '你是古典文学研究专家，正在与用户就一首诗进行多轮问答。回答紧扣原诗与检索上下文，不编造。' },
+              ...histMsgs,
+              { role: 'user', content: fuPrompt },
+            ],
+            temperature: 0.6,
+            max_tokens: 500,
+            stream: true,
+          });
+
+          let full = '';
+          for await (const chunk of resp) {
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              full += delta;
+              send('delta', { text: delta });
+            }
+          }
+          const latencyMs = Date.now() - t0;
+          await prisma.annotationLog.create({
+            data: {
+              userQuery: `followup:${poem.title}:${q}`,
+              poemId,
+              retrievedChunks: related.map((r) => ({ id: r.id, score: r.score })),
+              answer: full.slice(0, 3000),
+              model,
+              latencyMs,
+            },
+          });
+          send('done', { latencyMs, related: relatedMeta, model });
+        } catch (e: any) {
+          console.error('annotation followup error', e?.message || e);
+          send('error', { error: '追问生成失败，请重试' });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, { headers: SSE_HEADERS });
+  }
+
+  /* ================= 主注解模式（四维度流式生成） ================= */
 
   const stream = new ReadableStream({
     async start(controller) {

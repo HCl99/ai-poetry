@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getQueryCloud } from '@/lib/queryCloud';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,7 @@ function dynColor(d: string): string {
 export default async function StatsPage() {
   const [
     poemCount, poetCount, edgeCount, imageryCount, tagCount, logCount, creationCount, favCount,
-    poemDyn, poetDyn, cloud, logRows,
+    poemDyn, poetDyn, cloud, logRows, queryCloud,
   ] = await Promise.all([
     prisma.poem.count(),
     prisma.poetBio.count(),
@@ -33,6 +34,7 @@ export default async function StatsPage() {
       FROM annotation_logs
       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
       GROUP BY d ORDER BY d`,
+    getQueryCloud(60),
   ]);
 
   // 近 14 天检索热力序列（无数据的天补 0）
@@ -53,6 +55,7 @@ export default async function StatsPage() {
   const poemMax = Math.max(...poemDynRows.map((p) => p.count), 1);
   const poetMax = Math.max(...poetDynRows.map((p) => p.count), 1);
   const cloudMax = cloud[0]?.count || 1;
+  const queryMax = queryCloud.words[0]?.count || 1;
   const topImagery = cloud.slice(0, 10);
   const topImageryMax = topImagery[0]?.count || 1;
 
@@ -138,6 +141,35 @@ export default async function StatsPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* 用户检索词云 */}
+      <div className="paper-card p-6">
+        <h2 className="mb-1 font-ui text-[15px] font-medium text-ink-deep">用户都在问什么 · 检索词云</h2>
+        <p className="mb-4 font-ui text-xs text-ink-soft">来自最近 {queryCloud.total.toLocaleString()} 条真实检索提问的高频词 · 零额外数据采集成本</p>
+        {queryCloud.words.length === 0 ? (
+          <p className="py-8 text-center font-ui text-sm text-ink-soft">暂无足够检索记录，使用 AI 注解后即可生成词云</p>
+        ) : (
+          <div className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-2 py-3">
+            {queryCloud.words.map((w, i) => {
+              const ratio = w.count / queryMax;
+              return (
+                <span
+                  key={w.text}
+                  className="cursor-default font-brush leading-none transition-ink hover:scale-110"
+                  style={{
+                    fontSize: Math.round(16 + ratio * 26),
+                    color: CLOUD_COLORS[i % CLOUD_COLORS.length],
+                    opacity: 0.7 + ratio * 0.3,
+                  }}
+                  title={`被问及 ${w.count} 次`}
+                >
+                  {w.text}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

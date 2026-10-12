@@ -16,6 +16,7 @@ const NAV = [
   { key: 'compare', label: '多模型对比', href: '/workbench/compare', icon: 'scale', badge: 'AI' },
   { key: 'rag-eval', label: 'RAG评测', href: '/workbench/rag-eval', icon: 'flask', badge: 'AI' },
   { key: 'imagery', label: '意象图谱', href: '/workbench/imagery', icon: 'image' },
+  { key: 'imagery-timeline', label: '时空地图', href: '/workbench/imagery-timeline', icon: 'timeline' },
   { key: 'graph', label: '诗人图谱', href: '/workbench/graph', icon: 'network' },
   { key: 'stats', label: '数据大屏', href: '/workbench/stats', icon: 'chart' },
   { key: 'community', label: '作品社区', href: '/workbench/community', icon: 'users' },
@@ -37,6 +38,7 @@ function NavIcon({ name }: { name: string }) {
     case 'chat': return <svg {...common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
     case 'scale': return <svg {...common}><path d="M12 3v18" /><path d="M5 7l7-4 7 4" /><path d="M3 13l2-6 2 6a3.5 3.5 0 0 1-4 0z" /><path d="M17 13l2-6 2 6a3.5 3.5 0 0 1-4 0z" /><path d="M8 21h8" /></svg>;
     case 'flask': return <svg {...common}><path d="M9 3h6" /><path d="M10 3v6L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9V3" /><path d="M7.5 14h9" /></svg>;
+    case 'timeline': return <svg {...common}><path d="M3 3v18h18" /><path d="m6 15 4-5 3 3 5-7" /><circle cx="6" cy="15" r="1.2" /><circle cx="10" cy="10" r="1.2" /><circle cx="13" cy="13" r="1.2" /><circle cx="18" cy="6" r="1.2" /></svg>;
     default: return null;
   }
 }

@@ -21,11 +21,8 @@ export function AuthSplit({ totalPoems, children }: { totalPoems: number; childr
           <span className="font-brush text-2xl text-ink-deep">墨韵诗心</span>
         </div>
 
-        <h1 className="font-brush text-[40px] leading-tight text-ink-black min-[900px]:text-[48px]">
-          墨韵诗心
-          <span className="brand-gradient"> · AI古诗词</span>
-        </h1>
-        <p className="mt-2 font-ui text-lg tracking-[0.2em] text-ink-mid">文化探索平台</p>
+        <h1 className="font-brush text-[40px] leading-tight text-ink-black min-[900px]:text-[48px]">墨韵诗心</h1>
+        <p className="mt-2 font-ui text-lg tracking-[0.14em] text-ink-mid">AI 古诗词文化探索平台</p>
 
         <div className="mt-5 flex flex-wrap items-center gap-2 font-ui text-xs text-ink-mid">
           {['AI Native', '多模态', 'RAG', 'Agent', 'MCP'].map((t) => (

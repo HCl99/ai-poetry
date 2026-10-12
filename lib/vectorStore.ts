@@ -24,28 +24,42 @@ const g = globalThis as unknown as { __poemVectorStore?: Promise<Store> };
 
 async function load(): Promise<Store> {
   const t0 = Date.now();
-  const chunks = await prisma.chunk.findMany({
+  // 分页加载：单次 findMany 拉全量（~800MB 文本）会触发 Prisma NAPI 转换失败
+  const PAGE = 5000;
+  const total = await prisma.chunk.count({
     where: { chunkType: 'poem', embedding: { not: null }, refId: { not: null } },
-    select: { refId: true, embedding: true },
   });
   const ids: string[] = [];
   const vecs: number[][] = [];
   let dims = 0;
-  for (const c of chunks) {
-    try {
-      const v = JSON.parse(c.embedding as string) as number[];
-      if (!Array.isArray(v) || v.length === 0) continue;
-      if (dims === 0) dims = v.length;
-      if (v.length !== dims) continue;
-      // L2 归一化，点积即余弦
-      let norm = 0;
-      for (const x of v) norm += x * x;
-      norm = Math.sqrt(norm) || 1;
-      ids.push(c.refId as string);
-      vecs.push(v.map((x) => x / norm));
-    } catch {
-      /* 跳过坏行 */
+  let cursor: bigint | undefined;
+  for (let fetched = 0; fetched < total; ) {
+    const chunks = await prisma.chunk.findMany({
+      where: { chunkType: 'poem', embedding: { not: null }, refId: { not: null } },
+      select: { id: true, refId: true, embedding: true },
+      orderBy: { id: 'asc' },
+      take: PAGE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    if (chunks.length === 0) break;
+    for (const c of chunks) {
+      cursor = c.id;
+      try {
+        const v = JSON.parse(c.embedding as string) as number[];
+        if (!Array.isArray(v) || v.length === 0) continue;
+        if (dims === 0) dims = v.length;
+        if (v.length !== dims) continue;
+        // L2 归一化，点积即余弦
+        let norm = 0;
+        for (const x of v) norm += x * x;
+        norm = Math.sqrt(norm) || 1;
+        ids.push(c.refId as string);
+        vecs.push(v.map((x) => x / norm));
+      } catch {
+        /* 跳过坏行 */
+      }
     }
+    fetched += chunks.length;
   }
   const mat = new Float32Array(ids.length * dims);
   for (let i = 0; i < vecs.length; i++) mat.set(vecs[i], i * dims);
@@ -63,13 +77,23 @@ async function load(): Promise<Store> {
 async function getStore(): Promise<Store> {
   if (!g.__poemVectorStore) {
     g.__poemVectorStore = load();
+    return g.__poemVectorStore;
   }
   const store = await g.__poemVectorStore;
   if (Date.now() - store.loadedAt > TTL_MS) {
-    g.__poemVectorStore = load();
-    return g.__poemVectorStore;
+    // 后台刷新：先返回旧库，避免请求阻塞；新库就绪后自动替换
+    g.__poemVectorStore = load().catch(() => store);
   }
   return store;
+}
+
+/** 服务器启动预热（instrumentation.ts 调用） */
+export async function warmup(): Promise<void> {
+  try {
+    await getStore();
+  } catch (e) {
+    console.warn('[vectorStore] warmup skipped:', (e as Error)?.message);
+  }
 }
 
 /** 向量库中已有的向量规模（用于判断是否可用） */
@@ -77,7 +101,8 @@ export async function vectorCorpusSize(): Promise<number> {
   try {
     const s = await getStore();
     return s.ids.length;
-  } catch {
+  } catch (e) {
+    console.error('[vectorStore] corpus load failed:', (e as Error)?.message);
     return 0;
   }
 }

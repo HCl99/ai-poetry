@@ -59,7 +59,8 @@ export async function POST(req: Request) {
         let related: RelatedPoem[] = [];
 
         if (useVector) {
-          const hits = await topKSimilar(queryVec!, 5, poemId);
+          // 排除同题同作者的重复收录行（避免检索到自身重复数据）
+          const hits = await topKSimilar(queryVec!, 5, poemId, (m) => !(m.title === poem.title && m.author === poem.author));
           if (hits.length) {
             const bodies = await prisma.poem.findMany({
               where: { id: { in: hits.map((h) => h.id) } },

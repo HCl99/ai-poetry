@@ -31,3 +31,7 @@ next-env.d.ts
 
 # prisma
 /prisma/migrations/dev.db
+
+# python scripts
+__pycache__/
+*.pyc

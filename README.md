@@ -115,7 +115,26 @@ npm run dev            # http://localhost:3000
 
 > **语料路径说明**：`scripts/import_to_mysql.py` 顶部的 `TANG_DIR` 默认指向与项目同级的 `chinese-poetry-master/全唐诗` 目录。请先克隆 chinese-poetry 仓库到项目同级目录，或按需修改该变量。
 
-生产构建：`npm run build && npm run start`。
+### 部署（生产）
+
+```bash
+npm run build && npm run start   # Next.js 生产服务（端口 3000）
+```
+
+向量微服务需常驻，与 Next.js 同机部署：
+
+```bash
+# 方式一：pm2 托管两个进程（推荐）
+pm2 start "python scripts/embed_server.py" --name embed-server
+pm2 start "npm run start" --name ai-poetry
+pm2 save
+
+# 方式二：systemd / nohup 各自常驻亦可
+nohup python scripts/embed_server.py > embed.log 2>&1 &
+```
+
+> 向量服务不可用时应用可自动降级为意象共现检索（可用性优先），但演示完整 RAG 能力前请确认 8100 端口健康：`curl http://127.0.0.1:8100/health`。
+> 本地开发可用 `scripts\start_all.bat`（Windows）一键启动向量服务 + dev server。
 
 ## 六、环境变量
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AuthModal } from '@/components/auth-modal';
 import { useToast, Toast } from '@/components/toast';
+import { Typewriter } from '@/components/typewriter';
 
 /* ---------- 数据 ---------- */
 const FAMOUS_POEMS = [
@@ -93,15 +94,29 @@ function HeroBackdrop() {
             <stop offset="100%" stopColor="#C4A965" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <circle cx="1080" cy="110" r="90" fill="url(#moon)" />
-        <circle cx="1080" cy="110" r="42" fill="#C4A965" opacity="0.55" />
+        <g className="anim-ink-float">
+          <circle cx="1080" cy="110" r="90" fill="url(#moon)" />
+          <circle cx="1080" cy="110" r="42" fill="#C4A965" opacity="0.55" />
+        </g>
         <path d="M0 420V300Q180 190 360 260T720 230T1080 280T1440 220V420Z" fill="url(#m1)" />
         <path d="M0 420V350Q240 260 480 320T960 300T1440 330V420Z" fill="url(#m2)" />
-        <path d="M220 150q10-14 20 0M260 165q8-12 16 0M1180 170q9-13 18 0" stroke="#5D5853" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+        <g className="anim-ink-float" style={{ animationDelay: '-4s' }}>
+          <path d="M220 150q10-14 20 0M260 165q8-12 16 0M1180 170q9-13 18 0" stroke="#5D5853" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+        </g>
       </svg>
-      <div className="absolute left-[8%] top-[18%] h-64 w-64 rounded-full blur-[80px]" style={{ background: 'rgba(123,142,161,0.18)' }} />
-      <div className="absolute right-[12%] top-[30%] h-56 w-56 rounded-full blur-[70px]" style={{ background: 'rgba(196,169,101,0.15)' }} />
-      <div className="absolute bottom-[10%] left-[40%] h-52 w-52 rounded-full blur-[70px]" style={{ background: 'rgba(107,142,123,0.14)' }} />
+      {/* 山间雾气：缓慢横移（v2.2 动态化） */}
+      <div
+        className="anim-ink-drift absolute bottom-[26%] left-0 h-14 w-[130%]"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(250,248,243,0.5), transparent)' }}
+      />
+      <div className="anim-ink-breathe absolute left-[8%] top-[18%] h-64 w-64 rounded-full blur-[80px]" style={{ background: 'rgba(123,142,161,0.18)' }} />
+      <div className="anim-ink-breathe absolute right-[12%] top-[30%] h-56 w-56 rounded-full blur-[70px]" style={{ background: 'rgba(196,169,101,0.15)', animationDelay: '-4s' }} />
+      <div className="anim-ink-breathe absolute bottom-[10%] left-[40%] h-52 w-52 rounded-full blur-[70px]" style={{ background: 'rgba(107,142,123,0.14)', animationDelay: '-8s' }} />
+      {/* 墨滴晕染：周期性扩散消散（v2.2 动态化） */}
+      <div
+        className="anim-ink-spread absolute left-[18%] top-[52%] h-44 w-44 rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(139,115,85,0.28) 0%, rgba(139,115,85,0.08) 55%, transparent 75%)' }}
+      />
     </div>
   );
 }
@@ -175,6 +190,17 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
           <p className="anim-fade-up mt-3 font-ui text-lg tracking-[0.35em] text-ink-mid md:text-xl" style={{ animationDelay: '0.2s' }}>
             AI 古诗词文化探索平台
           </p>
+          {/* 打字机标语：逐句轮播（v2.2 动态化） */}
+          <div className="anim-fade-up mt-4 flex h-8 items-center justify-center" style={{ animationDelay: '0.25s' }}>
+            <Typewriter
+              className="font-serif text-base text-sepia md:text-lg"
+              lines={[
+                '以墨为舟，溯千年诗心。',
+                '一笔一画，皆是与古人的重逢。',
+                `AI 检索 ${numLabel.replace('+', '')} 诗篇，只为注解你眼前这一首。`,
+              ]}
+            />
+          </div>
           <p className="anim-fade-up mx-auto mt-6 max-w-2xl font-ui text-[15px] leading-relaxed text-ink-soft" style={{ animationDelay: '0.3s' }}>
             融合大语言模型与知识库检索增强，基于{numLabel.replace('+', '')}首开源古诗词数据，
             提供诗词探索、智能注解、风格迁移、意象可视化一站式深度文化探索体验。

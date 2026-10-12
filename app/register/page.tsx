@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { RegisterForm } from './register-form';
+import { InkBackdrop } from '@/components/ink-backdrop';
 
 export const metadata: Metadata = { title: '注册 · 墨韵诗心' };
 
 export default function RegisterPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-12" style={{ background: 'var(--paper)' }}>
-      <div className="w-full max-w-[440px] rounded-2xl shadow-ink" style={{ background: 'var(--paper-light)', border: '1px solid var(--border-c)' }}>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12" style={{ background: 'var(--paper)' }}>
+      <InkBackdrop />
+      <div className="anim-fade-up relative w-full max-w-[440px] rounded-2xl shadow-ink" style={{ background: 'var(--paper-light)', border: '1px solid var(--border-c)' }}>
         <div className="px-8 pb-8 pt-10 text-center">
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full font-brush text-xl text-white shadow-ink" style={{ background: 'linear-gradient(135deg,#8B7355,#A67C7C)' }}>
             墨

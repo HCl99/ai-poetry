@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { dayIndexOf } from '@/lib/daily';
 import { Sparkles, BookOpen, Edit, Star, Route, Flag } from 'lucide-react';
+import { Typewriter } from '@/components/typewriter';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +79,15 @@ export default async function DashboardPage() {
             <p className="mt-2 font-ui text-sm" style={{ color: 'rgba(245,242,236,0.75)' }}>
               最近活动 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
             </p>
+            {/* 打字机标语：登录后首页单句动态展示（v2.2 动态化） */}
+            <div className="mt-2 h-7">
+              <Typewriter
+                loop={false}
+                speed={140}
+                className="font-serif text-[15px]"
+                lines={['以墨为舟，溯千年诗心 —— 让 AI 陪你读遍唐宋。']}
+              />
+            </div>
             {dailyPoem && (
               <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'rgba(245,242,236,0.12)' }}>
                 <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.3)', color: '#F5F2EC' }}>每日一诗</span>

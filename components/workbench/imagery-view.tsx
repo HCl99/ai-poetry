@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Network } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { GraphQaPanel } from './graph-qa';
 
 interface ImageryItem { char: string; count: number }
 interface Edge { source: string; target: string; weight: number }
@@ -146,6 +147,9 @@ export function ImageryView({ imagery, edges, initialFocus }: {
           ))}
         </div>
       </div>
+
+      {/* 图谱问答（GraphRAG）：随焦点意象切换上下文 */}
+      <GraphQaPanel kind="imagery" focus={focus} />
       <Toast msg={msg} />
     </div>
   );

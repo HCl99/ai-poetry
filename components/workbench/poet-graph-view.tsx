@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Network } from 'lucide-react';
+import { GraphQaPanel } from './graph-qa';
 
 interface Edge { source: string; target: string; weight: number }
 
@@ -226,6 +227,9 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
           })}
         </div>
       </div>
+
+      {/* 图谱问答（GraphRAG）：随焦点切换上下文 */}
+      <GraphQaPanel kind="poet" focus={focus} />
     </div>
   );
 }

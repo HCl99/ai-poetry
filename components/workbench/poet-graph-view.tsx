@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Network } from 'lucide-react';
 
 interface Edge { source: string; target: string; weight: number }
@@ -36,6 +36,16 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
   initialFocus: string;
 }) {
   const [focus, setFocus] = useState(initialFocus);
+  const [showHint, setShowHint] = useState(false);
+
+  // 首次进入展示操作提示，关闭后不再出现
+  useEffect(() => {
+    if (!localStorage.getItem('graph-hint-seen')) setShowHint(true);
+  }, []);
+  function dismissHint() {
+    localStorage.setItem('graph-hint-seen', '1');
+    setShowHint(false);
+  }
 
   const maxDegree = Math.max(...Object.values(degreeMap), 1);
   const maxWeight = relations[0]?.weight || 1;
@@ -97,6 +107,12 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
 
       {/* 图谱画布 */}
       <div className="paper-card relative overflow-hidden">
+        {showHint && (
+          <div className="glass-strong absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full px-3.5 py-1.5 font-ui text-xs text-ink-mid shadow-ink anim-fade-up">
+            <span>点击节点切换焦点诗人 · 连线越粗互提越多 · 下方榜单可快速定位</span>
+            <button onClick={dismissHint} className="text-ink-soft transition-ink hover:text-ink-deep" aria-label="知道了">✕</button>
+          </div>
+        )}
         <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full">
           {/* 邻居间边 */}
           {peerEdges.map((e, i) => (

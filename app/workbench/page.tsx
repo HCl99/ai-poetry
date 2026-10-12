@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { dayIndexOf } from '@/lib/daily';
 import { Sparkles, BookOpen, Edit, Star, Route, Flag } from 'lucide-react';
-import { Typewriter } from '@/components/typewriter';
+import { HeroCarousel } from '@/components/workbench/hero-carousel';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,24 +70,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* 欢迎卡片 */}
-      <section className="relative overflow-hidden rounded-xl p-6 md:p-8" style={{ background: 'linear-gradient(120deg,#3A3835 0%,#5D5853 60%,#7B8EA1 130%)' }}>
-        <div className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full opacity-25" style={{ background: 'radial-gradient(circle,#C4A965,transparent 70%)' }} />
-        <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+      {/* 欢迎卡片：水墨场景轮播，每张背景对应一句贴合系统的话（v2.2 动态化） */}
+      <HeroCarousel>
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="font-brush text-3xl text-paper-light md:text-4xl">{greeting()}，{name}</h1>
             <p className="mt-2 font-ui text-sm" style={{ color: 'rgba(245,242,236,0.75)' }}>
               最近活动 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
             </p>
-            {/* 打字机标语：登录后首页单句动态展示（v2.2 动态化） */}
-            <div className="mt-2 h-7">
-              <Typewriter
-                loop={false}
-                speed={140}
-                className="font-serif text-[15px]"
-                lines={['以墨为舟，溯千年诗心 —— 让 AI 陪你读遍唐宋。']}
-              />
-            </div>
             {dailyPoem && (
               <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'rgba(245,242,236,0.12)' }}>
                 <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.3)', color: '#F5F2EC' }}>每日一诗</span>
@@ -106,7 +96,7 @@ export default async function DashboardPage() {
             <Sparkles className="h-4 w-4" /> 开始AI注解
           </Link>
         </div>
-      </section>
+      </HeroCarousel>
 
       {/* 统计卡片 */}
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -9,6 +9,7 @@ const COLOR: Record<string, string> = {
   transfer: '#8B7355',
   favorite: '#A67C7C',
   imagery: '#C4A965',
+  recite: '#9C9487',
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -17,6 +18,7 @@ const TYPE_LABEL: Record<string, string> = {
   transfer: '风格迁移',
   favorite: '收藏',
   imagery: '浏览意象',
+  recite: '背诵闯关',
 };
 
 export async function GET() {

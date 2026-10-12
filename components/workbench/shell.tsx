@@ -8,6 +8,7 @@ import { ProfileModal } from './profile-modal';
 const NAV = [
   { key: 'dashboard', label: '工作台', href: '/workbench', icon: 'home' },
   { key: 'explore', label: '诗词探索', href: '/workbench/explore', icon: 'book' },
+  { key: 'recite', label: '背诵闯关', href: '/workbench/recite', icon: 'grad' },
   { key: 'annotate', label: 'AI智能注解', href: '/workbench/annotate', icon: 'sparkles', badge: 'AI' },
   { key: 'transfer', label: '风格迁移', href: '/workbench/transfer', icon: 'edit', badge: 'AI' },
   { key: 'feihua', label: '飞花令', href: '/workbench/feihua', icon: 'quote', badge: 'AI' },
@@ -23,6 +24,7 @@ function NavIcon({ name }: { name: string }) {
   switch (name) {
     case 'home': return <svg {...common}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>;
     case 'book': return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>;
+    case 'grad': return <svg {...common}><path d="M22 9 12 4 2 9l10 5 10-5z" /><path d="M6 11.5V16c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5" /><path d="M22 9v5" /></svg>;
     case 'sparkles': return <svg {...common}><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" /></svg>;
     case 'edit': return <svg {...common}><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>;
     case 'image': return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-4-4-8 8" /></svg>;

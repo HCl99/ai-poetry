@@ -135,7 +135,7 @@ export default async function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
-            { label: '启蒙诵读', desc: '浏览研习 10 首经典', done: Math.min(readCount, 10), total: 10, c: '#7B8EA1', href: '/workbench/explore' },
+            { label: '启蒙诵读', desc: '背诵闯关 · 研习 10 首经典', done: Math.min(readCount, 10), total: 10, c: '#7B8EA1', href: '/workbench/recite' },
             { label: 'AI 精读', desc: '完成 5 首 AI 深度注解', done: Math.min(annotateDistinct, 5), total: 5, c: '#6B8E7B', href: '/workbench/annotate' },
             { label: '提笔创作', desc: '完成 3 首风格迁移创作', done: Math.min(creationCount, 3), total: 3, c: '#A67C7C', href: '/workbench/transfer' },
           ].map((s, i) => {

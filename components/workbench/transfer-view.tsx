@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, Download } from 'lucide-react';
+import { Sparkles, Download, Volume2, Square, Image as ImageIcon } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 
@@ -27,7 +27,45 @@ export function TransferView() {
   const [stepText, setStepText] = useState('');
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [error, setError] = useState('');
+  const [speaking, setSpeaking] = useState(false);
+  const [inkUrl, setInkUrl] = useState('');
+  const [inkLoading, setInkLoading] = useState(false);
   const { msg, show } = useToast();
+
+  /** Web Speech API 朗读生成诗词 */
+  function speak() {
+    if (!('speechSynthesis' in window)) { show('当前浏览器不支持语音合成'); return; }
+    if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(poem);
+    u.lang = 'zh-CN';
+    u.rate = 0.85;
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    window.speechSynthesis.speak(u);
+  }
+
+  /** CogView-3-Flash 生成水墨意境图 */
+  async function inkpaint() {
+    if (inkLoading || !poem) return;
+    setInkLoading(true);
+    try {
+      const r = await fetch('/api/inkpaint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: `${meta?.style || '古风'}诗词意境：${poem}` }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || '生成失败');
+      setInkUrl(d.url);
+      show('水墨意境图已生成');
+    } catch (e: any) {
+      show(e.message || '意境图生成失败');
+    } finally {
+      setInkLoading(false);
+    }
+  }
 
   async function generate() {
     if (loading) return;
@@ -38,6 +76,9 @@ export function TransferView() {
     setMeta(null);
     setDoneInfo(null);
     setStepText('');
+    setInkUrl('');
+    setSpeaking(false);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     try {
       const r = await fetch('/api/transfer', {
         method: 'POST',
@@ -219,13 +260,39 @@ export function TransferView() {
                 </div>
               )}
               {doneInfo && (
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    onClick={speak}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+                    title="朗读生成诗词"
+                  >
+                    {speaking ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                    {speaking ? '停止' : '朗读'}
+                  </button>
+                  <button
+                    onClick={inkpaint}
+                    disabled={inkLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
+                    title="CogView-3 生成水墨意境图"
+                  >
+                    {inkLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <ImageIcon className="h-3.5 w-3.5" />}
+                    {inkLoading ? '绘图中…' : '意境图'}
+                  </button>
                   <button
                     onClick={exportMd}
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
                   >
                     <Download className="h-3.5 w-3.5" /> 导出 Markdown 报告
                   </button>
+                </div>
+              )}
+              {inkUrl && (
+                <div className="mt-3 overflow-hidden rounded-lg anim-fade-up" style={{ border: '1px solid #D4CFC5' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={inkUrl} alt="水墨意境图" className="w-full object-cover" />
+                  <p className="bg-white/60 px-3 py-1.5 text-center font-ui text-xs text-ink-soft">
+                    CogView-3-Flash 水墨意境图 · 依据生成诗词绘制
+                  </p>
                 </div>
               )}
             </div>

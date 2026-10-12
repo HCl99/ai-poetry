@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
@@ -60,7 +60,22 @@ export function AnnotateView() {
   const [fav, setFav] = useState(false);
   const fullRef = useRef('');
   const [showSteps, setShowSteps] = useState(false);
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
   const { msg, show } = useToast();
+
+  /** Web Speech API 朗读某一维度内容，再次点击停止 */
+  function speak(key: string, text: string) {
+    if (!('speechSynthesis' in window)) { show('当前浏览器不支持语音合成'); return; }
+    if (speakingKey === key) { window.speechSynthesis.cancel(); setSpeakingKey(null); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    u.rate = 0.9;
+    u.onend = () => setSpeakingKey(null);
+    u.onerror = () => setSpeakingKey(null);
+    setSpeakingKey(key);
+    window.speechSynthesis.speak(u);
+  }
 
   useEffect(() => {
     fetch('/api/poems/list?limit=50')
@@ -78,6 +93,8 @@ export function AnnotateView() {
     setError('');
     setStream(null);
     setShowSteps(false);
+    setSpeakingKey(null);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     fullRef.current = '';
 
     // 首个检索 step 可能早于 meta 到达，先建空骨架
@@ -365,6 +382,16 @@ export function AnnotateView() {
                     >
                       <div className="mb-1.5 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
                         <Sparkles className="h-3.5 w-3.5 text-sepia" /> {d.tag}
+                        {d.content && (
+                          <button
+                            onClick={() => speak(d.key, `${d.tag}。${d.content}`)}
+                            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-ui text-xs text-ink-soft transition-ink hover:bg-white/60 hover:text-ink-deep"
+                            title="朗读本维度"
+                          >
+                            {speakingKey === d.key ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                            {speakingKey === d.key ? '停止' : '朗读'}
+                          </button>
+                        )}
                       </div>
                       {d.content ? (
                         <p className="font-ui text-[15px] leading-relaxed text-ink-mid">

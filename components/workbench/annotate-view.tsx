@@ -62,6 +62,15 @@ export function AnnotateView() {
   const [showSteps, setShowSteps] = useState(false);
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
   const { msg, show } = useToast();
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** 中断当前流式生成，已流式内容保留 */
+  function stopGenerate() {
+    abortRef.current?.abort();
+  }
+
+  // 卸载时中断未完成的请求
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   /** Web Speech API 朗读某一维度内容，再次点击停止 */
   function speak(key: string, text: string) {
@@ -89,6 +98,8 @@ export function AnnotateView() {
 
   async function generate() {
     if (!selected || loading) return;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setLoading(true);
     setError('');
     setStream(null);
@@ -107,6 +118,7 @@ export function AnnotateView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poemId: selected.id }),
+        signal: ctrl.signal,
       });
       if (!r.ok || !r.body) {
         const d = await r.json().catch(() => ({}));
@@ -150,6 +162,12 @@ export function AnnotateView() {
         }
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        // 用户主动停止：保留已流式内容，标记完成态以便朗读/导出
+        setStream((s) => (s ? { ...s, phase: 'done' } : s));
+        show('已停止生成，保留已生成内容');
+        return;
+      }
       setError(e.message || '网络异常，请重试');
     } finally {
       setLoading(false);
@@ -225,6 +243,7 @@ export function AnnotateView() {
             <select
               value={selected?.id || ''}
               onChange={(e) => {
+                abortRef.current?.abort();
                 setSelected(poems.find((p) => p.id === e.target.value) || null);
                 setStream(null);
                 setFav(false);
@@ -259,15 +278,25 @@ export function AnnotateView() {
                   </div>
                 )}
                 <div className="mt-5 flex gap-3">
-                  <button
-                    onClick={generate}
-                    disabled={loading}
-                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover disabled:opacity-60"
-                    style={{ background: '#3A3835' }}
-                  >
-                    {loading ? <span className="spinner" style={{ width: 15, height: 15 }} /> : <Sparkles className="h-4 w-4" />}
-                    {loading ? '生成中…' : '生成AI注解'}
-                  </button>
+                  {loading ? (
+                    <button
+                      onClick={stopGenerate}
+                      className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
+                      style={{ background: '#A67C7C' }}
+                      title="中断生成，保留已生成内容（Esc）"
+                    >
+                      <Square className="h-4 w-4" /> 停止生成
+                    </button>
+                  ) : (
+                    <button
+                      onClick={generate}
+                      className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
+                      style={{ background: '#3A3835' }}
+                      title="生成四维度 AI 注解（Enter）"
+                    >
+                      <Sparkles className="h-4 w-4" /> 生成AI注解
+                    </button>
+                  )}
                   <button
                     onClick={toggleFav}
                     className="flex h-11 w-11 items-center justify-center rounded-lg border-[1.5px] border-c transition-ink hover:bg-paper-dark"

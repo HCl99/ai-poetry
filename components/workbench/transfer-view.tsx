@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Download, Volume2, Square, Image as ImageIcon } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
@@ -31,6 +31,16 @@ export function TransferView() {
   const [inkUrl, setInkUrl] = useState('');
   const [inkLoading, setInkLoading] = useState(false);
   const { msg, show } = useToast();
+  const abortRef = useRef<AbortController | null>(null);
+  const startRef = useRef(0);
+
+  /** 中断当前流式生成，已生成内容保留 */
+  function stopGenerate() {
+    abortRef.current?.abort();
+  }
+
+  // 卸载时中断未完成的请求
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   /** Web Speech API 朗读生成诗词 */
   function speak() {
@@ -70,6 +80,9 @@ export function TransferView() {
   async function generate() {
     if (loading) return;
     if (!text.trim()) { show('请输入现代文内容'); return; }
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    startRef.current = Date.now();
     setLoading(true);
     setError('');
     setPoem('');
@@ -84,6 +97,7 @@ export function TransferView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, style }),
+        signal: ctrl.signal,
       });
       if (!r.ok || !r.body) {
         const d = await r.json().catch(() => ({}));
@@ -101,6 +115,12 @@ export function TransferView() {
         }
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        // 用户主动停止：保留已生成内容并进入完成态，便于朗读/导出/绘图
+        setDoneInfo({ latencyMs: Date.now() - startRef.current, saved: false });
+        show('已停止生成，保留已生成内容');
+        return;
+      }
       setError(e.message || '网络异常，请重试');
     } finally {
       setLoading(false);
@@ -199,15 +219,25 @@ export function TransferView() {
             </div>
           )}
 
-          <button
-            onClick={generate}
-            disabled={loading}
-            className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover disabled:opacity-60"
-            style={{ background: 'linear-gradient(135deg,#7B8EA1,#5D5853)' }}
-          >
-            {loading ? <span className="spinner" style={{ width: 15, height: 15 }} /> : <Sparkles className="h-4 w-4" />}
-            {loading ? '生成中…' : '开始风格迁移'}
-          </button>
+          {loading ? (
+            <button
+              onClick={stopGenerate}
+              className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
+              style={{ background: '#A67C7C' }}
+              title="中断生成，保留已生成内容（Esc）"
+            >
+              <Square className="h-4 w-4" /> 停止生成
+            </button>
+          ) : (
+            <button
+              onClick={generate}
+              className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
+              style={{ background: 'linear-gradient(135deg,#7B8EA1,#5D5853)' }}
+              title="AI 逐句炼字生成古风诗词（Enter）"
+            >
+              <Sparkles className="h-4 w-4" /> 开始风格迁移
+            </button>
+          )}
         </div>
 
         {/* 右栏：生成结果（流式逐字） */}

@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Download, Volume2, Square, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, Download, Volume2, Square, Image as ImageIcon, Share2 } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
+import { ShareCard, downloadSharePng } from './share-card';
 
 const STYLES = [
   { key: 'libai', name: '李白体', hint: '浪漫飘逸 · 想象瑰奇' },
@@ -32,9 +33,12 @@ export function TransferView() {
   const [inkLoading, setInkLoading] = useState(false);
   const [inkError, setInkError] = useState(false);
   const [inkZoom, setInkZoom] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareNoInk, setShareNoInk] = useState(false);
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const startRef = useRef(0);
+  const shareRef = useRef<HTMLDivElement>(null);
 
   /** 中断当前流式生成，已生成内容保留 */
   function stopGenerate() {
@@ -106,6 +110,7 @@ export function TransferView() {
     setInkUrl('');
     setInkError(false);
     setInkZoom(false);
+    setShareNoInk(false);
     setSpeaking(false);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     try {
@@ -177,6 +182,33 @@ export function TransferView() {
     a.click();
     URL.revokeObjectURL(url);
     show('已导出 Markdown 创作报告');
+  }
+
+  /** 导出水墨风分享图（PNG）：现代文 + 生成诗词 +（若有）意境图 */
+  async function exportShare() {
+    if (!shareRef.current || !poem || sharing) return;
+    setSharing(true);
+    const styleName = STYLES.find((s) => s.key === style)?.name || '古风';
+    try {
+      await downloadSharePng(shareRef.current, `分享-风格迁移-${styleName}-${Date.now()}.png`);
+      show(shareNoInk ? '已导出分享图（意境图跨域受限，未包含）' : '已导出水墨分享图');
+    } catch {
+      // 意境图跨域导致画布受污染时，降级为不含图重试一次
+      if (inkUrl && !shareNoInk) {
+        setShareNoInk(true);
+        await new Promise((r) => setTimeout(r, 100));
+        try {
+          await downloadSharePng(shareRef.current, `分享-风格迁移-${styleName}-${Date.now()}.png`);
+          show('已导出分享图（意境图跨域受限，未包含）');
+        } catch {
+          show('分享图导出失败，请重试');
+        }
+      } else {
+        show('分享图导出失败，请重试');
+      }
+    } finally {
+      setSharing(false);
+    }
   }
 
   const hasOutput = poem.length > 0;
@@ -332,6 +364,15 @@ export function TransferView() {
                     {inkLoading ? '绘图中…' : '意境图'}
                   </button>
                   <button
+                    onClick={exportShare}
+                    disabled={sharing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
+                    title="生成水墨风分享卡 PNG"
+                  >
+                    {sharing ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Share2 className="h-3.5 w-3.5" />}
+                    分享图
+                  </button>
+                  <button
                     onClick={exportMd}
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
                   >
@@ -387,6 +428,20 @@ export function TransferView() {
           )}
         </div>
       </div>
+      {/* 离屏分享卡：html2canvas 合成 PNG 用 */}
+      {doneInfo && poem && (
+        <div ref={shareRef} style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }} aria-hidden>
+          <ShareCard
+            kind="transfer"
+            title={`${STYLES.find((s) => s.key === style)?.name || '古风'} · 新作`}
+            subtitle={`现代文 → 古风诗词 · ${meta?.form || '古诗词'}`}
+            poemLines={poem.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 8)}
+            note={text.length > 90 ? `${text.slice(0, 90)}…` : text}
+            image={inkUrl && !shareNoInk ? inkUrl : undefined}
+            footer={`${meta?.model || 'glm-4-flash'} · ${new Date().toLocaleDateString('zh-CN')}`}
+          />
+        </div>
+      )}
       <Toast msg={msg} />
     </div>
   );

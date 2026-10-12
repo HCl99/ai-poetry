@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2 } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
+import { ShareCard, downloadSharePng } from './share-card';
 
 interface PoemItem {
   id: string; title: string; author: string; dynasty: string;
@@ -62,8 +63,10 @@ export function AnnotateView() {
   const [showSteps, setShowSteps] = useState(false);
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
   const [vertical, setVertical] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
+  const shareRef = useRef<HTMLDivElement>(null);
 
   /** 中断当前流式生成，已流式内容保留 */
   function stopGenerate() {
@@ -237,6 +240,20 @@ export function AnnotateView() {
     a.click();
     URL.revokeObjectURL(url);
     show('已导出 Markdown 注解报告');
+  }
+
+  /** 导出水墨风分享图（PNG）：原诗 + 四维度注解 + 品牌页脚 */
+  async function exportShare() {
+    if (!shareRef.current || !selected || !stream || sharing) return;
+    setSharing(true);
+    try {
+      await downloadSharePng(shareRef.current, `分享-注解-${selected.title}-${selected.author}.png`);
+      show('已导出水墨分享图');
+    } catch {
+      show('分享图导出失败，请重试');
+    } finally {
+      setSharing(false);
+    }
   }
 
   const isDone = stream?.phase === 'done';
@@ -510,12 +527,23 @@ export function AnnotateView() {
 
                 {isDone && (
                   <div className="flex items-center justify-between pt-1">
-                    <button
-                      onClick={exportMd}
-                      className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
-                    >
-                      <Download className="h-3.5 w-3.5" /> 导出 Markdown 报告
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={exportMd}
+                        className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+                      >
+                        <Download className="h-3.5 w-3.5" /> 导出 Markdown 报告
+                      </button>
+                      <button
+                        onClick={exportShare}
+                        disabled={sharing}
+                        className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
+                        title="生成水墨风分享卡 PNG"
+                      >
+                        {sharing ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Share2 className="h-3.5 w-3.5" />}
+                        分享图
+                      </button>
+                    </div>
                     <p className="font-ui text-xs text-ink-soft/70">
                       {stream.model} · 耗时 {((stream.latencyMs ?? 0) / 1000).toFixed(1)}s
                     </p>
@@ -526,6 +554,22 @@ export function AnnotateView() {
           </div>
         </div>
       </div>
+      {/* 离屏分享卡：html2canvas 合成 PNG 用 */}
+      {isDone && selected && (
+        <div ref={shareRef} style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }} aria-hidden>
+          <ShareCard
+            kind="annotate"
+            title={selected.title}
+            subtitle={`〔${selected.dynasty}〕${selected.author}`}
+            poemLines={selected.first ? selected.first.split(/(?<=[，。？！；])/).filter(Boolean).slice(0, 8) : ['（无正文）']}
+            sections={stream.dims.map((d) => ({
+              tag: d.tag,
+              content: d.content.length > 140 ? `${d.content.slice(0, 140)}…` : d.content || '（无内容）',
+            }))}
+            footer={`${stream.model} · 耗时 ${((stream.latencyMs ?? 0) / 1000).toFixed(1)}s · ${new Date().toLocaleDateString('zh-CN')}`}
+          />
+        </div>
+      )}
       <Toast msg={msg} />
     </div>
   );

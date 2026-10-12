@@ -11,6 +11,7 @@ const NAV = [
   { key: 'annotate', label: 'AI智能注解', href: '/workbench/annotate', icon: 'sparkles', badge: 'AI' },
   { key: 'transfer', label: '风格迁移', href: '/workbench/transfer', icon: 'edit', badge: 'AI' },
   { key: 'feihua', label: '飞花令', href: '/workbench/feihua', icon: 'quote', badge: 'AI' },
+  { key: 'poet-chat', label: '诗人对话', href: '/workbench/poet-chat', icon: 'chat', badge: 'AI' },
   { key: 'imagery', label: '意象图谱', href: '/workbench/imagery', icon: 'image' },
   { key: 'graph', label: '诗人图谱', href: '/workbench/graph', icon: 'network' },
 ];
@@ -25,6 +26,7 @@ function NavIcon({ name }: { name: string }) {
     case 'image': return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-4-4-8 8" /></svg>;
     case 'network': return <svg {...common}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="12" cy="18" r="2.5" /><path d="m8 7.5 7.5.3M7 8.5l4 7M16.5 10.5l-3.5 5.5" /></svg>;
     case 'quote': return <svg {...common}><path d="M3 21c3-1 5-3.5 5-7V7a4 4 0 0 0-4-4H3v8h4" /><path d="M14 21c3-1 5-3.5 5-7V7a4 4 0 0 0-4-4h-1v8h4" /></svg>;
+    case 'chat': return <svg {...common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
     default: return null;
   }
 }

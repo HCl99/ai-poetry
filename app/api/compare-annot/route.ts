@@ -1,8 +1,9 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { retrieveForPoem } from '@/lib/poemRetrieve';
+import { checkCitations } from '@/lib/citationCheck';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
-import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
+import { parseAnnotationSections, withFallback } from '@/lib/sections';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -18,18 +19,6 @@ const MODELS = [
   { key: 'A', model: 'glm-4-flash', label: 'GLM-4-Flash · 快速对话', maxTokens: 1200 },
   { key: 'B', model: 'glm-z1-flash', label: 'GLM-Z1-Flash · 深度推理', maxTokens: 2000 },
 ] as const;
-
-/** 引用校验：答案中《诗题》必须在检索列表内（排除本诗），返回合规/越界统计 */
-function checkCitations(text: string, ownTitle: string, retrieved: string[]) {
-  const found = [...text.matchAll(/《([^《》\n]{1,20})》/g)].map((m) => m[1].trim());
-  const valid: string[] = [];
-  const invalid: string[] = [];
-  for (const t of found) {
-    if (t === ownTitle) continue;
-    (retrieved.includes(t) ? valid : invalid).push(t);
-  }
-  return { total: valid.length + invalid.length, valid, invalid };
-}
 
 /** 推理模型思维链剔除 */
 function stripThink(s: string): string {

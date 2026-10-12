@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
@@ -151,6 +151,42 @@ export function AnnotateView() {
       setFav(!!d.favorited);
       show(d.favorited ? '已加入收藏' : '已取消收藏');
     }
+  }
+
+  /** 导出带引用出处的 Markdown 注解报告 */
+  function exportMd() {
+    if (!selected || !stream || stream.phase !== 'done') return;
+    const lines: string[] = [
+      `# 《${selected.title}》AI 注解报告`,
+      '',
+      `> 〔${selected.dynasty}〕${selected.author} · 墨韵诗心 AI 注解引擎 · 模型 ${stream.model} · 耗时 ${((stream.latencyMs ?? 0) / 1000).toFixed(1)}s`,
+      '',
+      '## 原文',
+      '',
+      selected.first || '（无正文）',
+      '',
+    ];
+    for (const d of stream.dims) {
+      lines.push(`## ${d.tag}`, '', d.content || '（无内容）', '', `> 引用出处：${d.citation}`, '');
+    }
+    if (stream.related.length) {
+      lines.push('## RAG 检索相似诗篇', '');
+      for (const r of stream.related) {
+        lines.push(
+          `- 《${r.title}》 ${r.author}〔${r.dynasty}〕${r.score != null ? `（相似度 ${(r.score * 100).toFixed(0)}%）` : ''}`,
+        );
+      }
+      lines.push('');
+    }
+    lines.push('---', `生成时间：${new Date().toLocaleString('zh-CN')}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `注解-${selected.title}-${selected.author}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    show('已导出 Markdown 注解报告');
   }
 
   const isDone = stream?.phase === 'done';
@@ -365,9 +401,17 @@ export function AnnotateView() {
                 )}
 
                 {isDone && (
-                  <p className="pt-1 text-right font-ui text-xs text-ink-soft/70">
-                    {stream.model} · 耗时 {((stream.latencyMs ?? 0) / 1000).toFixed(1)}s
-                  </p>
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      onClick={exportMd}
+                      className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+                    >
+                      <Download className="h-3.5 w-3.5" /> 导出 Markdown 报告
+                    </button>
+                    <p className="font-ui text-xs text-ink-soft/70">
+                      {stream.model} · 耗时 {((stream.latencyMs ?? 0) / 1000).toFixed(1)}s
+                    </p>
+                  </div>
                 )}
               </div>
             )}

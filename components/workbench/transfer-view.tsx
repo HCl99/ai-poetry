@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Download } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 
@@ -64,6 +64,42 @@ export function TransferView() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /** 导出带检索范例出处的 Markdown 创作报告 */
+  function exportMd() {
+    if (!meta || !doneInfo || !poem) return;
+    const styleName = STYLES.find((s) => s.key === style)?.name || meta.style;
+    const lines: string[] = [
+      '# 风格迁移创作报告',
+      '',
+      `> ${styleName} · ${meta.form || '古诗词'} · 墨韵诗心 AI 风格迁移 · 模型 ${meta.model} · 耗时 ${(doneInfo.latencyMs / 1000).toFixed(1)}s`,
+      '',
+      '## 现代文原文',
+      '',
+      text,
+      '',
+      '## 生成诗词',
+      '',
+      poem,
+      '',
+    ];
+    if (meta.exemplars?.length) {
+      lines.push('## RAG 向量检索风格范例', '');
+      for (const e of meta.exemplars) {
+        lines.push(`- 《${e.title}》（相似度 ${(e.score * 100).toFixed(0)}%）`);
+      }
+      lines.push('');
+    }
+    lines.push('---', `生成时间：${new Date().toLocaleString('zh-CN')}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `风格迁移-${styleName}-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    show('已导出 Markdown 创作报告');
   }
 
   const hasOutput = poem.length > 0;
@@ -180,6 +216,16 @@ export function TransferView() {
                       《{e.title}》<span className="ml-1 text-sepia">{(e.score * 100).toFixed(0)}%</span>
                     </span>
                   ))}
+                </div>
+              )}
+              {doneInfo && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={exportMd}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+                  >
+                    <Download className="h-3.5 w-3.5" /> 导出 Markdown 报告
+                  </button>
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
 import { hybridCoarse, vectorCorpusSize, type VectorHit } from '@/lib/vectorStore';
 import { rerankTopN } from '@/lib/reranker';
+import { detectImageryChars } from '@/lib/imageryDetect';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
@@ -364,6 +365,9 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
         }));
         const latencyMs = Date.now() - t0;
 
+        /* ---- 多模态联动：识别注解与原诗中的库内意象，驱动前端自动生成意境图 ---- */
+        const imageryChars = await detectImageryChars(`${full}\n${orig}`);
+
         /* ---- 日志 + 学习记录 ---- */
         await prisma.annotationLog.create({
           data: {
@@ -385,7 +389,7 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
           },
         });
 
-        send('done', { latencyMs, dimensions, model });
+        send('done', { latencyMs, dimensions, model, imageryChars });
       } catch (e: any) {
         console.error('annotation stream error', e?.message || e);
         send('error', { error: 'AI生成失败，请重试' });

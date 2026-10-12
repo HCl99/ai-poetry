@@ -23,6 +23,7 @@ interface StreamState {
   steps: Step[];
   phase: 'retrieve' | 'generate' | 'done';
   latencyMs?: number;
+  imageryChars?: string[];
 }
 
 /** 引用归因高亮：正文中《诗题》若命中本次检索结果，渲染为可识别的归因标记 */
@@ -76,25 +77,32 @@ export function AnnotateView() {
   const [fuInput, setFuInput] = useState('');
   const [fuLoading, setFuLoading] = useState(false);
   const fuAbortRef = useRef<AbortController | null>(null);
-  // 多模态联动：注解完成后按诗中意象标签生成水墨意境图，随分享卡一并导出
+  // 多模态联动：注解完成后按识别意象自动生成水墨意境图，随分享卡一并导出
   const [inkUrl, setInkUrl] = useState<string | null>(null);
   const [inkLoading, setInkLoading] = useState(false);
   const [inkError, setInkError] = useState('');
+  const [inkChars, setInkChars] = useState<string[]>([]);
 
   // 换诗时清空上一首的意境配图
   useEffect(() => {
     setInkUrl(null);
     setInkError('');
     setInkLoading(false);
+    setInkChars([]);
   }, [selected?.id]);
 
-  /** 按意象标签与诗句首联组 prompt，调用 CogView 生成水墨意境图 */
-  async function genInk() {
+  /**
+   * 生成水墨意境图：优先使用注解识别的意象（AI 对诗的理解），无则回退诗标签。
+   * auto=true 时由注解完成自动触发，失败静默降级为手动按钮，不弹错不打扰。
+   */
+  async function genInk(chars?: string[], auto = false) {
     if (!selected || inkLoading) return;
+    const useChars = (chars && chars.length > 0 ? chars : selected.tags).slice(0, 3);
+    setInkChars(useChars);
     setInkLoading(true);
-    setInkError('');
+    if (!auto) setInkError('');
     try {
-      const prompt = `中国水墨画，《${selected.title}》意境，${selected.tags.slice(0, 3).join('、')}意象，留白意境`;
+      const prompt = `中国水墨画，《${selected.title}》意境，${useChars.join('、')}意象，留白意境`;
       const r = await fetch('/api/inkpaint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,9 +111,9 @@ export function AnnotateView() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || '生成失败');
       setInkUrl(d.url);
-      show('意境图已生成，导出分享图将自动收录该配图');
+      if (!auto) show('意境图已生成，导出分享图将自动收录该配图');
     } catch (e: any) {
-      setInkError(e?.message || '意境图生成失败，请重试');
+      if (!auto) setInkError(e?.message || '意境图生成失败，请重试');
     } finally {
       setInkLoading(false);
     }
@@ -276,12 +284,15 @@ export function AnnotateView() {
         } else if (event === 'error') {
           throw new Error(data.error || '生成失败');
         } else if (event === 'done') {
+          const chars = (data.imageryChars as string[] | undefined) || [];
           setStream((s) =>
             s
-              ? { ...s, phase: 'done', latencyMs: data.latencyMs, dims: data.dimensions as Dim[] }
+              ? { ...s, phase: 'done', latencyMs: data.latencyMs, dims: data.dimensions as Dim[], imageryChars: chars }
               : s,
           );
           show('AI注解完成');
+          // 多模态融合：注解完成后自动按识别意象生成意境图（静默模式，失败不打扰）
+          if (chars.length > 0) genInk(chars, true);
         }
       }
     } catch (e: any) {
@@ -755,27 +766,30 @@ export function AnnotateView() {
                   <div className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
-                        <Palette className="h-3.5 w-3.5 text-sepia" /> 水墨意境配图 · 按诗中意象自动生成
+                        <Palette className="h-3.5 w-3.5 text-sepia" /> 水墨意境配图 · 由 AI 注解识别意象驱动
                       </div>
                       {inkUrl && !inkLoading && (
-                        <button onClick={genInk} className="font-ui text-xs text-muted-blue transition-ink hover:underline">重新生成</button>
+                        <button onClick={() => genInk()} className="font-ui text-xs text-muted-blue transition-ink hover:underline">重新生成</button>
                       )}
                     </div>
-                    {selected.tags.length > 0 && (
-                      <p className="mt-1.5 font-ui text-xs text-ink-soft">
-                        绘图灵感：{selected.tags.slice(0, 4).join('、')} ——「{selected.first.slice(0, 20)}…」
-                      </p>
-                    )}
+                    <p className="mt-1.5 font-ui text-xs text-ink-soft">
+                      {inkChars.length > 0 ? 'AI 从注解中识别的意象：' : '绘图灵感（诗标签）：'}
+                      <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+                        {(inkChars.length > 0 ? inkChars : selected.tags.slice(0, 4)).map((t) => (
+                          <span key={t} className="rounded-full px-2 py-0.5 font-ui text-xs" style={{ background: 'rgba(139,115,85,0.14)', color: '#8B7355' }}>{t}</span>
+                        ))}
+                      </span>
+                    </p>
                     {inkLoading && (
                       <div className="mt-3 flex h-40 items-center justify-center rounded-lg" style={{ background: 'var(--paper-light)' }}>
                         <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
-                        <span className="ml-2 font-ui text-xs text-ink-soft">CogView 正在挥毫…</span>
+                        <span className="ml-2 font-ui text-xs text-ink-soft">CogView 正在按意象挥毫…</span>
                       </div>
                     )}
                     {inkError && (
                       <p className="mt-3 font-ui text-xs" style={{ color: '#A67C7C' }}>
                         {inkError}{' '}
-                        <button onClick={genInk} className="text-muted-blue transition-ink hover:underline">重试</button>
+                        <button onClick={() => genInk()} className="text-muted-blue transition-ink hover:underline">重试</button>
                       </p>
                     )}
                     {inkUrl && (
@@ -783,10 +797,10 @@ export function AnnotateView() {
                     )}
                     {!inkUrl && !inkLoading && !inkError && (
                       <button
-                        onClick={genInk}
+                        onClick={() => genInk()}
                         className="mt-3 inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
                       >
-                        <Palette className="h-3.5 w-3.5" /> 生成意境配图
+                        <Palette className="h-3.5 w-3.5" /> 手动生成意境配图
                       </button>
                     )}
                   </div>

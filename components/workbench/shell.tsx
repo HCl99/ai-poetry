@@ -15,6 +15,7 @@ const NAV = [
   { key: 'imagery', label: '意象图谱', href: '/workbench/imagery', icon: 'image' },
   { key: 'graph', label: '诗人图谱', href: '/workbench/graph', icon: 'network' },
   { key: 'stats', label: '数据大屏', href: '/workbench/stats', icon: 'chart' },
+  { key: 'community', label: '作品社区', href: '/workbench/community', icon: 'users' },
 ];
 
 function NavIcon({ name }: { name: string }) {
@@ -27,6 +28,7 @@ function NavIcon({ name }: { name: string }) {
     case 'image': return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-4-4-8 8" /></svg>;
     case 'network': return <svg {...common}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="12" cy="18" r="2.5" /><path d="m8 7.5 7.5.3M7 8.5l4 7M16.5 10.5l-3.5 5.5" /></svg>;
     case 'chart': return <svg {...common}><path d="M3 3v18h18" /><rect x="7" y="12" width="3" height="6" rx="0.5" /><rect x="12" y="8" width="3" height="10" rx="0.5" /><rect x="17" y="5" width="3" height="13" rx="0.5" /></svg>;
+    case 'users': return <svg {...common}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
     case 'quote': return <svg {...common}><path d="M3 21c3-1 5-3.5 5-7V7a4 4 0 0 0-4-4H3v8h4" /><path d="M14 21c3-1 5-3.5 5-7V7a4 4 0 0 0-4-4h-1v8h4" /></svg>;
     case 'chat': return <svg {...common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
     default: return null;

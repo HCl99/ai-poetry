@@ -176,10 +176,28 @@ model Creation {
   inputText  String   @map("input_text") @db.Text
   outputText String   @map("output_text") @db.Text
   model      String?  @db.VarChar(32)
+  isPublic   Boolean  @default(false) @map("is_public")
   createdAt  DateTime @default(now()) @map("created_at")
 
+  likes CreationLike[]
+
   @@index([userId, createdAt], map: "idx_creation_user")
+  @@index([isPublic, createdAt], map: "idx_creation_public")
   @@map("creations")
+}
+
+// 创作点赞（一人一赞，可取消）
+model CreationLike {
+  id         BigInt   @id @default(autoincrement())
+  creationId BigInt   @map("creation_id")
+  userId     String   @map("user_id") @db.Char(36)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  creation Creation @relation(fields: [creationId], references: [id], onDelete: Cascade)
+
+  @@unique([creationId, userId], map: "uk_creation_like")
+  @@index([userId], map: "idx_creation_like_user")
+  @@map("creation_likes")
 }
 
 // 诗词笔记

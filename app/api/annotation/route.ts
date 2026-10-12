@@ -1,7 +1,8 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
-import { topKSimilar, vectorCorpusSize } from '@/lib/vectorStore';
+import { topKSimilar, vectorCorpusSize, type VectorHit } from '@/lib/vectorStore';
+import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
 import OpenAI from 'openai';
@@ -54,20 +55,35 @@ export async function POST(req: Request) {
             : '向量服务不可用，降级为意象共现检索',
         });
 
-        /* ---- 阶段 2：语义检索（向量 topK，失败回退意象共现） ---- */
-        type RelatedPoem = { id: string; title: string; author: string; dynasty: string; body: string; score: number | null };
+        /* ---- 阶段 2：语义检索（向量粗排 → CrossEncoder 精排，失败回退意象共现） ---- */
+        // score: 粗排余弦相似度（展示用，量纲稳定）；rerankScore: 精排相关度（排序依据）
+        type RelatedPoem = { id: string; title: string; author: string; dynasty: string; body: string; score: number | null; rerankScore?: number };
         let related: RelatedPoem[] = [];
+        let rerankApplied = false;
 
         if (useVector) {
-          // 排除同题同作者的重复收录行（避免检索到自身重复数据）
-          const hits = await topKSimilar(queryVec!, 5, poemId, (m) => !(m.title === poem.title && m.author === poem.author));
-          if (hits.length) {
+          // 第一阶段：向量粗排 top20（更多候选供精排选用）
+          const coarse = await topKSimilar(queryVec!, 20, poemId, (m) => !(m.title === poem.title && m.author === poem.author));
+          if (coarse.length) {
             const bodies = await prisma.poem.findMany({
-              where: { id: { in: hits.map((h) => h.id) } },
+              where: { id: { in: coarse.map((h) => h.id) } },
               select: { id: true, paragraphsSimp: true },
             });
             const bodyMap = new Map(bodies.map((b) => [b.id, ((b.paragraphsSimp as string[] | null) || []).join('')]));
-            related = hits.map((h) => ({ ...h, body: bodyMap.get(h.id) || '', score: h.score }));
+            // 第二阶段：CrossEncoder 精排（粗排结果重排序，取 top5）
+            const reranked = await rerankTopN(
+              queryText,
+              coarse.map((h) => ({ ...h, body: bodyMap.get(h.id) || '' })),
+              (item) => `《${item.title}》${item.author}：${item.body}`,
+              5,
+            );
+            if (reranked) {
+              related = reranked.map((r) => ({ ...r.item, rerankScore: r.score }));
+              rerankApplied = true;
+            } else {
+              // reranker 不可用时降级为粗排 top5
+              related = coarse.slice(0, 5).map((h) => ({ ...h, body: bodyMap.get(h.id) || '', score: h.score }));
+            }
           }
         }
         if (related.length === 0) {
@@ -101,9 +117,12 @@ export async function POST(req: Request) {
           }
         }
         send('step', {
-          label: useVector ? 'RAG · 向量语义检索' : '意象共现检索',
+          label: useVector ? `RAG · ${rerankApplied ? '向量+精排' : '向量语义检索'}` : '意象共现检索',
           detail: related.length
-            ? related.map((r) => `《${r.title}》${r.score != null ? ` 相似度 ${r.score}` : ''}`).join('；')
+            ? related.map((r) => {
+                if (rerankApplied) return `《${r.title}》 精排 ${r.rerankScore}`;
+                return `《${r.title}》${r.score != null ? ` 相似度 ${r.score}` : ''}`;
+              }).join('；')
             : '未检索到相似诗篇',
         });
 
@@ -125,7 +144,9 @@ export async function POST(req: Request) {
           zici: existing ? `AI赏析库 · ${model} 生成` : '模型知识 · 通行校注本',
           diangu: related[0]
             ? useVector
-              ? `向量语义检索 · 《${related[0].title}》(相似度 ${related[0].score})`
+              ? (rerankApplied
+                  ? `向量粗排+CrossEncoder 精排 · 《${related[0].title}》(精排 ${related[0].rerankScore})`
+                  : `向量语义检索 · 《${related[0].title}》(相似度 ${related[0].score})`)
               : `意象共现检索 · 《${related[0].title}》`
             : useVector
               ? '向量语义检索'

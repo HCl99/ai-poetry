@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
 import { topKSimilar } from '@/lib/vectorStore';
+import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import OpenAI from 'openai';
 
@@ -37,28 +38,42 @@ export async function POST(req: Request) {
     async start(controller) {
       const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
       try {
-        /* ---- RAG：向量检索该风格诗人的语义相近范例 ---- */
+        /* ---- RAG：向量粗排 → CrossEncoder 精排，检索该风格诗人的语义相近范例 ---- */
         const queryVec = await embedText(text.trim());
-        let exemplars: { title: string; body: string; score: number }[] = [];
+        // score: 粗排余弦（展示）；rerankScore: 精排相关度（排序依据）
+        let exemplars: { title: string; body: string; score: number; rerankScore?: number }[] = [];
+        let rerankApplied = false;
         if (queryVec) {
-          const hits = await topKSimilar(queryVec, 3, undefined, (m) => m.author === s.author);
-          if (hits.length) {
+          const coarse = await topKSimilar(queryVec, 12, undefined, (m) => m.author === s.author);
+          if (coarse.length) {
             const rows = await prisma.poem.findMany({
-              where: { id: { in: hits.map((h) => h.id) } },
+              where: { id: { in: coarse.map((h) => h.id) } },
               select: { id: true, paragraphsSimp: true },
             });
             const bodyMap = new Map(rows.map((r) => [r.id, ((r.paragraphsSimp as string[] | null) || []).join('')]));
-            exemplars = hits.map((h) => ({
+            const cands = coarse.map((h) => ({
               title: h.title,
               body: (bodyMap.get(h.id) || '').slice(0, 80),
               score: h.score,
             }));
+            const reranked = await rerankTopN(
+              text.trim(),
+              cands,
+              (item) => `《${item.title}》：${item.body}`,
+              3,
+            );
+            if (reranked) {
+              exemplars = reranked.map((r) => ({ ...r.item, rerankScore: r.score }));
+              rerankApplied = true;
+            } else {
+              exemplars = cands.slice(0, 3);
+            }
           }
         }
         send('step', {
-          label: 'RAG · 风格范例检索',
+          label: rerankApplied ? 'RAG · 风格范例检索（向量+精排）' : 'RAG · 风格范例检索',
           detail: exemplars.length
-            ? exemplars.map((e) => `《${e.title}》 相似度 ${e.score}`).join('；')
+            ? exemplars.map((e) => `《${e.title}》 ${rerankApplied ? `精排 ${e.rerankScore}` : `相似度 ${e.score}`}`).join('；')
             : '未命中范例，使用模型内知识',
         });
 

@@ -72,6 +72,20 @@ export function AnnotateView() {
   // 卸载时中断未完成的请求
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // 快捷键：Enter 生成注解，Esc 停止生成
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { abortRef.current?.abort(); return; }
+      if (e.key !== 'Enter' || e.isComposing) return;
+      const t = e.target as HTMLElement | null;
+      if (t && ['TEXTAREA', 'INPUT', 'SELECT', 'BUTTON'].includes(t.tagName)) return;
+      if (!loading && selected) generate();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, selected]);
+
   /** Web Speech API 朗读某一维度内容，再次点击停止 */
   function speak(key: string, text: string) {
     if (!('speechSynthesis' in window)) { show('当前浏览器不支持语音合成'); return; }

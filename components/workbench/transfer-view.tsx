@@ -44,6 +44,15 @@ export function TransferView() {
   // 卸载时中断未完成的请求
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // 快捷键：Esc 停止生成
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') abortRef.current?.abort();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   /** Web Speech API 朗读生成诗词 */
   function speak() {
     if (!('speechSynthesis' in window)) { show('当前浏览器不支持语音合成'); return; }
@@ -210,7 +219,14 @@ export function TransferView() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="写下你想转化为古诗词的现代文…"
+            onKeyDown={(e) => {
+              // Enter 生成（Shift+Enter 换行），输入法组词期间不触发
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                generate();
+              }
+            }}
+            placeholder="写下你想转化为古诗词的现代文…（Enter 生成，Shift+Enter 换行）"
             className="min-h-[120px] w-full resize-y rounded-lg border-[1.5px] border-c bg-white/60 p-4 font-ui text-sm leading-relaxed outline-none transition-ink focus:border-ink-deep"
           />
           <div className="mt-2 flex items-center justify-between">

@@ -154,6 +154,8 @@ export async function POST(req: Request) {
           qinggan: bio ? `诗人小传 · 《${poem.author}》传记资料` : '诗人小传库',
           geli: '格律分析引擎',
         };
+        // 引用归因：检索到的诗题集合，前端用于高亮正文中的《诗题》引用
+        const retrievedTitles = related.map((r) => r.title);
         const dimsMeta = ANNOTATION_SECTIONS.map((d) => ({
           key: d.key,
           tag: d.tag,
@@ -182,7 +184,7 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
 【字词释义】
 （解析诗中2-4个关键字词的含义与用法，150字以内）
 【典故溯源】
-（解析诗中典故或核心意象的历史文化源流，150字以内）
+（解析诗中典故或核心意象的历史文化源流，150字以内${relatedCtx ? '；若参考了上述相似诗篇，须以《诗题》明确标注引用来源' : ''}）
 【情感分析】
 （分析诗歌的情感路径与意境层次，150字以内）
 【格律分析】

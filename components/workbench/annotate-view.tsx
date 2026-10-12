@@ -23,6 +23,30 @@ interface StreamState {
   latencyMs?: number;
 }
 
+/** 引用归因高亮：正文中《诗题》若命中本次检索结果，渲染为可识别的归因标记 */
+function renderWithCitations(text: string, related: RelatedPoem[]): React.ReactNode {
+  const titles = new Map(related.map((r) => [r.title, r]));
+  const parts = text.split(/(《[^》]{1,30}》)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) => {
+    const m = part.match(/^《([^》]{1,30})》$/);
+    const hit = m ? titles.get(m[1]) : undefined;
+    if (hit) {
+      return (
+        <mark
+          key={i}
+          title={`引用自检索相似诗篇：《${hit.title}》${hit.author}`}
+          className="rounded px-0.5 font-medium"
+          style={{ background: 'rgba(107,142,123,0.18)', color: '#4E6E5D' }}
+        >
+          {part}
+        </mark>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 const DYNASTY_CLASS: Record<string, string> = {
   唐: 'dynasty-tang', 宋: 'dynasty-song', 元: 'dynasty-yuan', 明清: 'dynasty-mingqing',
 };
@@ -308,7 +332,7 @@ export function AnnotateView() {
                       </div>
                       {d.content ? (
                         <p className="font-ui text-[15px] leading-relaxed text-ink-mid">
-                          {d.content}
+                          {renderWithCitations(d.content, stream.related)}
                           {active && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
                         </p>
                       ) : (

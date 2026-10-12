@@ -75,7 +75,7 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
-          <Link href="/workbench/annotate" className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg px-5 py-3 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5" style={{ background: '#F5F2EC', color: '#3A3835' }}>
+          <Link href="/workbench/annotate" className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg px-5 py-3 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5" style={{ background: 'var(--inset)', color: 'var(--ink-deep)' }}>
             <Sparkles className="h-4 w-4" /> 开始AI注解
           </Link>
         </div>
@@ -108,7 +108,7 @@ export default async function DashboardPage() {
               <h2 className="font-ui text-[15px] font-medium text-ink-deep">AI注解 · 最近</h2>
               <Link href="/workbench/annotate" className="font-ui text-xs text-muted-blue transition-ink hover:underline">查看全部 →</Link>
             </div>
-            <div className="mb-4 rounded-lg p-4 text-center" style={{ background: '#F5F2EC' }}>
+            <div className="mb-4 rounded-lg p-4 text-center" style={{ background: 'var(--inset)' }}>
               <p className="font-brush text-xl text-ink-deep">{previewAnnotation.title}</p>
               <p className="mt-0.5 font-ui text-xs text-ink-soft">〔{previewAnnotation.dynasty}〕{previewAnnotation.author}</p>
               <p className="mt-2 font-serif text-sm leading-loose text-ink-mid">
@@ -116,7 +116,7 @@ export default async function DashboardPage() {
               </p>
             </div>
             <div className="space-y-3">
-              <div className="rounded-lg p-3.5" style={{ borderLeft: '3px solid #8B7355', background: '#F5F2EC' }}>
+              <div className="rounded-lg p-3.5" style={{ borderLeft: '3px solid #8B7355', background: 'var(--inset)' }}>
                 <div className="mb-1 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
                   <Sparkles className="h-3.5 w-3.5 text-sepia" /> 字词释义
                 </div>
@@ -163,7 +163,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             {imageryTop.map((im) => (
-              <Link key={im.char} href={`/workbench/imagery?focus=${encodeURIComponent(im.char)}`} className="rounded-lg p-4 text-center transition-ink hover:-translate-y-0.5" style={{ background: '#F5F2EC' }}>
+              <Link key={im.char} href={`/workbench/imagery?focus=${encodeURIComponent(im.char)}`} className="rounded-lg p-4 text-center transition-ink hover:-translate-y-0.5" style={{ background: 'var(--inset)' }}>
                 <span className="font-brush text-2xl text-ink-deep">{im.char}</span>
                 <p className="mt-1 font-ui text-xs text-ink-soft">{im.count} 首</p>
               </Link>
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
             <p className="py-8 text-center font-ui text-sm text-ink-soft">还没有注解记录，生成一条 AI 注解试试</p>
           )}
           <div className="relative space-y-4 pl-5">
-            <span className="absolute left-[6px] top-1 h-[calc(100%-8px)] w-px" style={{ background: '#E5DFD4' }} />
+            <span className="absolute left-[6px] top-1 h-[calc(100%-8px)] w-px" style={{ background: 'var(--border-light)' }} />
             {agentLogs.map((l) => (
               <div key={l.id.toString()} className="relative">
                 <span className="absolute -left-5 top-1 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />

@@ -32,8 +32,19 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
+
+  // 夜色主题：localStorage 持久化
+  useEffect(() => { setDark(localStorage.getItem('theme') === 'dark'); }, []);
+  function toggleTheme() {
+    setDark((v) => {
+      const nv = !v;
+      localStorage.setItem('theme', nv ? 'dark' : 'light');
+      return nv;
+    });
+  }
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -42,7 +53,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-theme={dark ? 'dark' : undefined} style={dark ? { background: '#1D1B18' } : undefined}>
       {/* 顶部栏 */}
       <header className="glass-strong fixed inset-x-0 top-0 z-40 h-16 border-b border-light">
         <div className="flex h-full items-center gap-4 px-4 md:px-6">
@@ -50,7 +61,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
           </button>
           <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full font-brush text-sm text-white shadow-ink" style={{ background: 'linear-gradient(135deg,#3A3835,#5D5853)' }}>墨</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full font-brush text-sm text-white shadow-ink" style={{ background: 'var(--brand-grad)' }}>墨</span>
             <span className="font-brush text-xl text-ink-deep">墨韵诗心</span>
           </Link>
           <div className="mx-auto hidden w-full max-w-[480px] items-center md:flex">
@@ -64,6 +75,18 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-mid transition-ink hover:bg-paper-dark"
+              aria-label="切换夜色主题"
+              title={dark ? '切换为宣纸色' : '切换为夜色'}
+            >
+              {dark ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></svg>
+              )}
+            </button>
             <Link href="/workbench" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-ink-mid transition-ink hover:bg-paper-dark" aria-label="通知">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: '#A67C7C' }} />
@@ -86,12 +109,12 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
                 key={n.key}
                 href={n.href}
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 font-ui text-sm transition-ink"
-                style={active ? { background: '#3A3835', color: '#FAF8F3' } : { color: '#5D5853' }}
+                style={active ? { background: 'var(--btn-bg)', color: 'var(--btn-text)' } : { color: 'var(--ink-mid)' }}
               >
                 <NavIcon name={n.icon} />
                 {n.label}
                 {n.badge && (
-                  <span className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={active ? { background: 'rgba(107,142,123,0.4)', color: '#FAF8F3' } : { background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{n.badge}</span>
+                  <span className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={active ? { background: 'rgba(107,142,123,0.35)', color: 'var(--btn-text)' } : { background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{n.badge}</span>
                 )}
               </Link>
             );
@@ -99,7 +122,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
         </nav>
         <div className="mt-auto border-t border-light p-4">
           <button onClick={() => setProfileOpen(true)} className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition-ink hover:bg-paper-dark">
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-full font-brush text-sm text-white" style={{ background: 'linear-gradient(135deg,#3A3835,#5D5853)' }}>
+            <span className="relative flex h-9 w-9 items-center justify-center rounded-full font-brush text-sm text-white" style={{ background: 'var(--brand-grad)' }}>
               {(user.name || user.email || '客')[0]}
               <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
             </span>

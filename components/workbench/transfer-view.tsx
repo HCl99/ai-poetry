@@ -234,8 +234,8 @@ export function TransferView() {
                 className="rounded-full border-[1.5px] px-4 py-2 font-ui text-sm transition-ink"
                 style={
                   style === s.key
-                    ? { background: '#3A3835', color: '#FAF8F3', borderColor: '#3A3835' }
-                    : { borderColor: '#D4CFC5', color: '#5D5853' }
+                    ? { background: 'var(--btn-bg)', color: 'var(--btn-text)', borderColor: 'var(--btn-bg)' }
+                    : { borderColor: 'var(--border-c)', color: 'var(--ink-mid)' }
                 }
                 title={s.hint}
               >
@@ -287,7 +287,7 @@ export function TransferView() {
             <button
               onClick={generate}
               className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
-              style={{ background: 'linear-gradient(135deg,#7B8EA1,#5D5853)' }}
+              style={{ background: 'var(--btn-grad)' }}
               title="AI 逐句炼字生成古风诗词（Enter）"
             >
               <Sparkles className="h-4 w-4" /> 开始风格迁移
@@ -317,7 +317,7 @@ export function TransferView() {
 
           {hasOutput && (
             <div className="flex flex-1 flex-col anim-fade-in">
-              <div className="flex flex-1 items-center justify-center rounded-lg p-8" style={{ background: '#F5F2EC' }}>
+              <div className="flex flex-1 items-center justify-center rounded-lg p-8" style={{ background: 'var(--inset)' }}>
                 <p className="whitespace-pre-line text-center font-serif text-lg leading-[2.6] text-ink-deep">
                   {poem}
                   {loading && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
@@ -381,21 +381,21 @@ export function TransferView() {
                 </div>
               )}
               {(inkLoading || inkError || inkUrl) && (
-                <div className="mt-3 overflow-hidden rounded-lg anim-fade-up" style={{ border: '1px solid #D4CFC5' }}>
+                <div className="mt-3 overflow-hidden rounded-lg anim-fade-up" style={{ border: '1px solid var(--border-c)' }}>
                   {inkLoading && (
-                    <div className="flex flex-col items-center justify-center py-14" style={{ background: '#F5F2EC' }}>
+                    <div className="flex flex-col items-center justify-center py-14" style={{ background: 'var(--inset)' }}>
                       <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
                       <p className="mt-3 font-ui text-xs text-ink-soft">CogView-3 正在晕染墨色，约 20 秒…</p>
                     </div>
                   )}
                   {inkError && !inkLoading && (
-                    <div className="flex flex-col items-center justify-center py-10" style={{ background: '#F5F2EC' }}>
+                    <div className="flex flex-col items-center justify-center py-10" style={{ background: 'var(--inset)' }}>
                       <ImageIcon className="h-8 w-8 text-ink-soft/40" strokeWidth={1.5} />
                       <p className="mt-2 font-ui text-xs" style={{ color: '#A67C7C' }}>意境图生成失败</p>
                       <button
                         onClick={inkpaint}
                         className="mt-3 rounded-lg px-4 py-1.5 font-ui text-xs text-white transition-ink hover:-translate-y-0.5"
-                        style={{ background: '#3A3835' }}
+                        style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
                       >
                         重试
                       </button>

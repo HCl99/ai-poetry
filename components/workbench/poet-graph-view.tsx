@@ -12,7 +12,7 @@ const DYNASTY_COLORS: Record<string, string> = {
   宋: '#7B8EA1',
   元: '#8B7355',
   明: '#6B8E7B',
-  清: '#5D5853',
+  清: '#9C9487',
 };
 const FALLBACK_COLOR = '#9B8E7E';
 
@@ -150,8 +150,8 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
           })}
           {/* 中心焦点节点 */}
           <g className="cursor-pointer">
-            <circle cx={CX} cy={CY} r={radiusOf(focus, true)} fill="#3A3835" />
-            <text x={CX} y={CY + 6} textAnchor="middle" fontSize={focus.length > 2 ? 18 : 22} fill="#F5F2EC" fontWeight={700}>
+            <circle cx={CX} cy={CY} r={radiusOf(focus, true)} style={{ fill: 'var(--btn-bg)' }} />
+            <text x={CX} y={CY + 6} textAnchor="middle" fontSize={focus.length > 2 ? 18 : 22} style={{ fill: 'var(--btn-text)' }} fontWeight={700}>
               {focus}
             </text>
             <text x={CX} y={CY + radiusOf(focus, true) + 16} textAnchor="middle" fontSize={11} fill="#8B857A">
@@ -194,10 +194,10 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
                   key={name}
                   onClick={() => setFocus(name)}
                   className="rounded-lg p-3 text-center transition-ink hover:-translate-y-0.5"
-                  style={active ? { background: '#3A3835', color: '#F5F2EC' } : { background: '#F5F2EC' }}
+                  style={active ? { background: 'var(--btn-bg)', color: 'var(--btn-text)' } : { background: 'var(--inset)' }}
                 >
                   <span className="font-brush text-2xl" style={active ? {} : { color: c }}>{name}</span>
-                  <p className={`mt-0.5 font-ui text-xs ${active ? '' : 'text-ink-soft'}`} style={active ? { color: 'rgba(245,242,236,0.7)' } : {}}>
+                  <p className={`mt-0.5 font-ui text-xs ${active ? '' : 'text-ink-soft'}`} style={active ? { color: 'var(--btn-text)', opacity: 0.75 } : {}}>
                     {dynastyMap[name] || ''} · {deg} 关联
                   </p>
                 </button>

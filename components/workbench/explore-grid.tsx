@@ -69,8 +69,8 @@ export function ExploreGrid({
                 className="rounded-full border-[1.5px] px-4 py-1.5 text-sm transition-ink"
                 style={
                   active
-                    ? { background: '#3A3835', color: '#FAF8F3', borderColor: '#3A3835' }
-                    : { borderColor: '#D4CFC5', color: '#5D5853' }
+                    ? { background: 'var(--btn-bg)', color: 'var(--btn-text)', borderColor: 'var(--btn-bg)' }
+                    : { borderColor: 'var(--border-c)', color: 'var(--ink-mid)' }
                 }
               >
                 {d === '全部' ? '全部' : DYNASTY_LABEL[d]}
@@ -87,7 +87,7 @@ export function ExploreGrid({
             placeholder="搜索诗题、作者…"
             className="h-9 w-full rounded-full border border-c bg-white/70 px-4 font-ui text-sm outline-none transition-ink focus:border-ink-mid md:w-64"
           />
-          <button type="submit" className="h-9 shrink-0 rounded-full px-5 font-ui text-sm text-white transition-ink" style={{ background: '#3A3835' }}>
+          <button type="submit" className="h-9 shrink-0 rounded-full px-5 font-ui text-sm text-white transition-ink" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
             搜索
           </button>
         </form>

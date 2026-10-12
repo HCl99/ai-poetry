@@ -18,7 +18,7 @@ export function Toast({ msg }: { msg: string | null }) {
   return (
     <div
       className="fixed bottom-8 left-1/2 z-[999] -translate-x-1/2 rounded-full px-7 py-3 text-sm anim-fade-up"
-      style={{ background: '#3A3835', color: '#F5F2EC' }}
+      style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
     >
       {msg}
     </div>

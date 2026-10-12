@@ -72,7 +72,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 anim-fade-in" style={{ background: 'rgba(60,50,40,0.4)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
-      <div className="anim-scale-in flex max-h-[80vh] w-full max-w-[480px] flex-col overflow-hidden rounded-xl" style={{ background: '#FAF8F3' }} onClick={(e) => e.stopPropagation()}>
+      <div className="anim-scale-in flex max-h-[80vh] w-full max-w-[480px] flex-col overflow-hidden rounded-xl" style={{ background: 'var(--paper-light)' }} onClick={(e) => e.stopPropagation()}>
         {/* 头部 */}
         <div className="flex items-center justify-between border-b border-light px-6 py-4">
           {sub !== 'main' ? (
@@ -92,7 +92,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
           {sub === 'main' && (
             <>
               <div className="flex items-center gap-3 border-b border-light px-6 py-5">
-                <span className="relative flex h-11 w-11 items-center justify-center rounded-full font-brush text-lg text-white" style={{ background: 'linear-gradient(135deg,#3A3835,#5D5853)' }}>
+                <span className="relative flex h-11 w-11 items-center justify-center rounded-full font-brush text-lg text-white" style={{ background: 'var(--brand-grad)' }}>
                   {user.name[0]}
                   <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
                 </span>
@@ -125,7 +125,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
             <div className="space-y-3 p-5">
               {favorites.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">还没有收藏诗词，去诗词探索页发现美吧</p>}
               {favorites.map((f: any) => (
-                <div key={f.id} className="rounded-lg p-4" style={{ background: '#F5F2EC' }}>
+                <div key={f.id} className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                   <div className="flex items-center gap-2">
                     <span className={`dynasty-tag ${DYN[f.dynasty] || 'dynasty-tang'}`}>{f.dynasty || '唐'}</span>
                     <span className="font-brush text-lg text-ink-deep">{f.title}</span>
@@ -142,7 +142,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
             <div className="p-5">
               {history.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">暂无学习记录</p>}
               <div className="relative space-y-5 pl-5">
-                <span className="absolute left-[7px] top-1 h-[calc(100%-8px)] w-px" style={{ background: '#E5DFD4' }} />
+                <span className="absolute left-[7px] top-1 h-[calc(100%-8px)] w-px" style={{ background: 'var(--border-light)' }} />
                 {history.map((h: any) => (
                   <div key={h.id} className="relative">
                     <span className="absolute -left-5 top-1 h-3.5 w-3.5 rounded-full border-2 border-paper-light" style={{ background: h.color || '#6B8E7B' }} />
@@ -160,7 +160,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
             <div className="space-y-3 p-5">
               {creations.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">还没有创作，去风格迁移页试试吧</p>}
               {creations.map((c: any) => (
-                <div key={c.id} className="rounded-lg p-4" style={{ background: '#F5F2EC' }}>
+                <div key={c.id} className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                   <div className="flex items-center justify-between">
                     <span className="rounded-full px-2.5 py-0.5 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{c.style}</span>
                     <span className="font-ui text-xs text-ink-soft">{c.time}</span>
@@ -177,7 +177,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
             <div className="space-y-3 p-5">
               {notes.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">暂无笔记，可在注解页保存心得</p>}
               {notes.map((n: any) => (
-                <div key={n.id} className="rounded-lg p-4" style={{ background: '#F5F2EC' }}>
+                <div key={n.id} className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                   <div className="font-ui text-sm font-medium text-ink-deep">{n.title}</div>
                   <p className="mt-1 line-clamp-3 font-ui text-sm leading-relaxed text-ink-mid">{n.content}</p>
                   <p className="mt-1.5 font-ui text-xs text-ink-soft">{n.time}</p>
@@ -200,7 +200,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                   <input defaultValue={f.value} className="h-10 w-full rounded-lg border-[1.5px] border-c bg-white/60 px-3 text-sm outline-none transition-ink focus:border-ink-deep" />
                 </div>
               ))}
-              <button type="submit" className="h-10 w-full rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5" style={{ background: '#3A3835' }}>保存设置</button>
+              <button type="submit" className="h-10 w-full rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>保存设置</button>
             </form>
           )}
 
@@ -214,7 +214,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                 { q: '如何收藏诗词？', a: '在诗词探索或注解页面点击收藏按钮，即可在「我的收藏」中查看。' },
                 { q: '遇到内容问题怎么办？', a: 'AI 生成内容仅供参考，如发现注解有误或内容不当，可重新生成或通过邮箱联系我们。' },
               ].map((f, i) => (
-                <details key={i} className="rounded-lg px-4 py-3" style={{ background: '#F5F2EC' }}>
+                <details key={i} className="rounded-lg px-4 py-3" style={{ background: 'var(--inset)' }}>
                   <summary className="cursor-pointer font-ui text-sm text-ink-deep">{f.q}</summary>
                   <p className="mt-2 font-ui text-sm leading-relaxed text-ink-mid">{f.a}</p>
                 </details>

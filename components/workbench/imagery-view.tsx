@@ -74,7 +74,7 @@ export function ImageryView({ imagery, edges, initialFocus }: {
         {/* 中心节点 */}
         <div
           className="absolute left-1/2 top-1/2 z-10 flex h-[72px] w-[72px] -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full font-brush text-2xl shadow-ink transition-ink"
-          style={{ background: '#3A3835', color: '#F5F2EC' }}
+          style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
           onClick={() => show(`核心意象「${focus}」`)}
         >
           {focus}
@@ -123,10 +123,10 @@ export function ImageryView({ imagery, edges, initialFocus }: {
                 key={im.char}
                 onClick={() => setFocus(im.char)}
                 className="rounded-lg p-3 text-center transition-ink hover:-translate-y-0.5"
-                style={focus === im.char ? { background: '#3A3835', color: '#F5F2EC' } : { background: '#F5F2EC' }}
+                style={focus === im.char ? { background: 'var(--btn-bg)', color: 'var(--btn-text)' } : { background: 'var(--inset)' }}
               >
                 <span className={`font-brush text-2xl ${focus === im.char ? '' : 'text-ink-deep'}`}>{im.char}</span>
-                <p className={`mt-0.5 font-ui text-xs ${focus === im.char ? '' : 'text-ink-soft'}`} style={focus === im.char ? { color: 'rgba(245,242,236,0.7)' } : {}}>
+                <p className={`mt-0.5 font-ui text-xs ${focus === im.char ? '' : 'text-ink-soft'}`} style={focus === im.char ? { color: 'var(--btn-text)', opacity: 0.75 } : {}}>
                   {im.count}
                 </p>
                 <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: 'rgba(60,50,40,0.08)' }}>

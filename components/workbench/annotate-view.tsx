@@ -291,7 +291,7 @@ export function AnnotateView() {
 
             {selected && (
               <>
-                <div className="relative mt-5 rounded-lg p-6" style={{ background: '#F5F2EC' }}>
+                <div className="relative mt-5 rounded-lg p-6" style={{ background: 'var(--inset)' }}>
                   <div className="absolute right-3 top-3 flex items-center gap-1">
                     <button
                       onClick={() => setVertical((v) => !v)}
@@ -360,7 +360,7 @@ export function AnnotateView() {
                     <button
                       onClick={generate}
                       className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
-                      style={{ background: '#3A3835' }}
+                      style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
                       title="生成四维度 AI 注解（Enter）"
                     >
                       <Sparkles className="h-4 w-4" /> 生成AI注解
@@ -369,7 +369,7 @@ export function AnnotateView() {
                   <button
                     onClick={toggleFav}
                     className="flex h-11 w-11 items-center justify-center rounded-lg border-[1.5px] border-c transition-ink hover:bg-paper-dark"
-                    style={fav ? { borderColor: '#A67C7C', color: '#A67C7C' } : { color: '#8B857E' }}
+                    style={fav ? { borderColor: '#A67C7C', color: '#A67C7C' } : { color: 'var(--ink-soft)' }}
                     aria-label="收藏"
                   >
                     <Star className="h-4 w-4" fill={fav ? '#A67C7C' : 'none'} />
@@ -426,7 +426,7 @@ export function AnnotateView() {
             {error && (
               <div className="flex flex-1 flex-col items-center justify-center py-16">
                 <p className="font-ui text-sm" style={{ color: '#A67C7C' }}>{error}</p>
-                <button onClick={generate} className="mt-4 rounded-lg px-5 py-2 font-ui text-sm text-white transition-ink" style={{ background: '#3A3835' }}>
+                <button onClick={generate} className="mt-4 rounded-lg px-5 py-2 font-ui text-sm text-white transition-ink" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
                   重试
                 </button>
               </div>
@@ -476,7 +476,7 @@ export function AnnotateView() {
                     <div
                       key={d.key}
                       className="rounded-lg p-4 anim-fade-up"
-                      style={{ borderLeft: '3px solid #8B7355', background: '#F5F2EC' }}
+                      style={{ borderLeft: '3px solid #8B7355', background: 'var(--inset)' }}
                     >
                       <div className="mb-1.5 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
                         <Sparkles className="h-3.5 w-3.5 text-sepia" /> {d.tag}
@@ -510,7 +510,7 @@ export function AnnotateView() {
 
                 {/* 向量语义检索到的相似诗篇（meta 到达即可见，体现先检索后生成） */}
                 {stream.related.length > 0 && (
-                  <div className="rounded-lg p-4" style={{ border: '1px dashed #D4CFC5', background: 'rgba(123,142,161,0.05)' }}>
+                  <div className="rounded-lg p-4" style={{ border: '1px dashed var(--border-c)', background: 'rgba(123,142,161,0.05)' }}>
                     <div className="mb-2 flex items-center gap-1.5 font-ui text-xs font-medium text-muted-blue">
                       <Network className="h-3.5 w-3.5" /> RAG · 向量语义检索到的相似诗篇
                     </div>

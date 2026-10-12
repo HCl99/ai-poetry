@@ -29,6 +29,9 @@ const H = 560;
 const CX = W / 2;
 const CY = H / 2;
 
+// SSR 与客户端浮点序列化精度不同，坐标统一截断避免水合告警
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
 export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }: {
   relations: Edge[];
   dynastyMap: Record<string, string>;
@@ -68,8 +71,8 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
       const angle = (i / neighbors.length) * Math.PI * 2 - Math.PI / 2;
       return {
         ...n,
-        x: CX + rx * Math.cos(angle),
-        y: CY + ry * Math.sin(angle),
+        x: round2(CX + rx * Math.cos(angle)),
+        y: round2(CY + ry * Math.sin(angle)),
       };
     });
   }, [neighbors]);
@@ -93,7 +96,7 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
   function radiusOf(name: string, isFocus = false): number {
     if (isFocus) return 44;
     const d = degreeMap[name] || 1;
-    return 22 + (d / maxDegree) * 16;
+    return round2(22 + (d / maxDegree) * 16);
   }
 
   return (
@@ -128,7 +131,7 @@ export function PoetGraphView({ relations, dynastyMap, degreeMap, initialFocus }
               key={n.name}
               x1={CX} y1={CY} x2={n.x} y2={n.y}
               stroke={colorOf(dynastyMap[n.name])}
-              strokeWidth={Math.max(1.5, (n.weight / maxWeight) * 8)}
+              strokeWidth={round2(Math.max(1.5, (n.weight / maxWeight) * 8))}
               opacity={0.45}
             />
           ))}

@@ -68,7 +68,7 @@ export function ImageryView({ imagery, edges, initialFocus }: {
       <div className="paper-card relative h-[420px] overflow-hidden">
         <svg className="absolute inset-0 h-full w-full">
           {neighbors.map((n, i) => (
-            <line key={n.char} x1="50%" y1="50%" x2={pos[i].x} y2={pos[i].y} stroke="#D4CFC5" strokeWidth={Math.min(3, 0.5 + n.weight / 2000)} />
+            <line key={n.char} x1="50%" y1="50%" x2={pos[i].x} y2={pos[i].y} stroke="#D4CFC5" strokeWidth={Math.round(Math.min(3, 0.5 + n.weight / 2000) * 100) / 100} />
           ))}
         </svg>
         {/* 中心节点 */}

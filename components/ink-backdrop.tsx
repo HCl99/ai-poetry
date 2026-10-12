@@ -14,10 +14,14 @@ export function InkBackdrop() {
       <div className="anim-ink-breathe absolute left-[6%] top-[22%] h-64 w-64 rounded-full blur-[80px]" style={{ background: 'rgba(123,142,161,0.16)' }} />
       <div className="anim-ink-breathe absolute right-[16%] bottom-[18%] h-56 w-56 rounded-full blur-[70px]" style={{ background: 'rgba(196,169,101,0.13)', animationDelay: '-4s' }} />
       <div className="anim-ink-breathe absolute left-[38%] top-[56%] h-52 w-52 rounded-full blur-[70px]" style={{ background: 'rgba(107,142,123,0.12)', animationDelay: '-8s' }} />
-      {/* 墨滴晕染：周期性扩散消散 */}
+      {/* 墨滴晕染：左上 + 右下双滴，周期性扩散消散 */}
       <div
-        className="anim-ink-spread absolute left-[15%] top-[60%] h-44 w-44 rounded-full"
+        className="anim-ink-spread absolute left-[15%] top-[28%] h-44 w-44 rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(139,115,85,0.3) 0%, rgba(139,115,85,0.08) 55%, transparent 75%)' }}
+      />
+      <div
+        className="anim-ink-spread absolute bottom-[12%] right-[10%] h-52 w-52 rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(123,142,161,0.26) 0%, rgba(123,142,161,0.07) 55%, transparent 75%)', animationDelay: '-3.5s' }}
       />
       {/* 远山（两层静态剪影） */}
       <svg className="absolute bottom-0 left-0 w-[110%] text-ink-mid" viewBox="0 0 1440 260" fill="none" preserveAspectRatio="none" style={{ opacity: 0.16 }}>

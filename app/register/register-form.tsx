@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { registerUser } from './actions';
 import { PasswordInput, TEXT_INPUT_CLASS } from '@/components/password-input';
+import { WechatLoginButton } from '@/components/wechat-login';
 
 function MailIcon() {
   return (
@@ -107,6 +108,8 @@ export function RegisterForm() {
         {loading && <span className="spinner" style={{ width: 16, height: 16 }} />}
         {loading ? '注册中…' : '注  册'}
       </button>
+
+      <WechatLoginButton />
     </form>
   );
 }

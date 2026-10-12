@@ -4,20 +4,13 @@ import { useState } from 'react';
 import { authenticate } from '@/app/login/actions';
 import { registerUser } from '@/app/register/actions';
 import { useToast, Toast } from '@/components/toast';
+import { PasswordInput, TEXT_INPUT_CLASS } from '@/components/password-input';
 
 function MailIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="4" width="20" height="16" rx="2" />
       <path d="m22 7-10 6L2 7" />
-    </svg>
-  );
-}
-function LockIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
   );
 }
@@ -34,7 +27,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { msg, show } = useToast();
+  const { msg } = useToast();
 
   if (!open) return null;
 
@@ -117,70 +110,19 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
           {tab === 'register' && (
             <div className="relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><UserIcon /></span>
-              <input
-                name="name"
-                placeholder="昵称（选填）"
-                className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-3 text-sm outline-none transition-ink focus:border-ink-deep"
-                style={{ boxShadow: 'none' }}
-                onFocus={(e) => (e.target.style.boxShadow = '0 0 0 3px rgba(58,56,53,0.08)')}
-                onBlur={(e) => (e.target.style.boxShadow = 'none')}
-              />
+              <input name="name" placeholder="昵称（选填）" className={TEXT_INPUT_CLASS} />
             </div>
           )}
           <div className="relative">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><MailIcon /></span>
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="邮箱"
-              className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-3 text-sm outline-none transition-ink focus:border-ink-deep"
-              onFocus={(e) => (e.target.style.boxShadow = '0 0 0 3px rgba(58,56,53,0.08)')}
-              onBlur={(e) => (e.target.style.boxShadow = 'none')}
-            />
+            <input name="email" type="email" required placeholder="邮箱" className={TEXT_INPUT_CLASS} />
           </div>
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><LockIcon /></span>
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={6}
-              placeholder="密码"
-              className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-3 text-sm outline-none transition-ink focus:border-ink-deep"
-              onFocus={(e) => (e.target.style.boxShadow = '0 0 0 3px rgba(58,56,53,0.08)')}
-              onBlur={(e) => (e.target.style.boxShadow = 'none')}
-            />
-          </div>
-          {tab === 'register' && (
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><LockIcon /></span>
-              <input
-                name="confirm"
-                type="password"
-                required
-                minLength={6}
-                placeholder="确认密码"
-                className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-3 text-sm outline-none transition-ink focus:border-ink-deep"
-                onFocus={(e) => (e.target.style.boxShadow = '0 0 0 3px rgba(58,56,53,0.08)')}
-                onBlur={(e) => (e.target.style.boxShadow = 'none')}
-              />
-            </div>
-          )}
+          <PasswordInput name="password" placeholder="密码" required minLength={6} />
+          {tab === 'register' && <PasswordInput name="confirm" placeholder="确认密码" required minLength={6} />}
 
           {tab === 'login' && (
-            <div className="flex items-center justify-between text-sm text-ink-soft">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" defaultChecked className="h-3.5 w-3.5 accent-[#3A3835]" />
-                记住我
-              </label>
-              <button
-                type="button"
-                onClick={() => show('请联系管理员重置密码')}
-                className="transition-ink hover:text-ink-deep"
-              >
-                忘记密码?
-              </button>
+            <div className="flex justify-end text-sm text-ink-soft">
+              <span>忘记密码？请联系管理员重置</span>
             </div>
           )}
 
@@ -198,23 +140,6 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
           >
             {loading && <span className="spinner" style={{ width: 16, height: 16 }} />}
             {loading ? (tab === 'login' ? '登录中…' : '注册中…') : tab === 'login' ? '登  录' : '注  册'}
-          </button>
-
-          <div className="flex items-center gap-3 text-xs text-ink-soft">
-            <span className="h-px flex-1" style={{ background: '#E5DFD4' }} />
-            或
-            <span className="h-px flex-1" style={{ background: '#E5DFD4' }} />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => show('微信登录暂未开放，请使用邮箱注册')}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-c font-ui text-sm text-ink-mid transition-ink hover:bg-paper-dark"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-            </svg>
-            微信登录
           </button>
         </form>
       </div>

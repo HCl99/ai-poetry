@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare, Palette } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
@@ -76,6 +76,40 @@ export function AnnotateView() {
   const [fuInput, setFuInput] = useState('');
   const [fuLoading, setFuLoading] = useState(false);
   const fuAbortRef = useRef<AbortController | null>(null);
+  // 多模态联动：注解完成后按诗中意象标签生成水墨意境图，随分享卡一并导出
+  const [inkUrl, setInkUrl] = useState<string | null>(null);
+  const [inkLoading, setInkLoading] = useState(false);
+  const [inkError, setInkError] = useState('');
+
+  // 换诗时清空上一首的意境配图
+  useEffect(() => {
+    setInkUrl(null);
+    setInkError('');
+    setInkLoading(false);
+  }, [selected?.id]);
+
+  /** 按意象标签与诗句首联组 prompt，调用 CogView 生成水墨意境图 */
+  async function genInk() {
+    if (!selected || inkLoading) return;
+    setInkLoading(true);
+    setInkError('');
+    try {
+      const prompt = `中国水墨画，《${selected.title}》意境，${selected.tags.slice(0, 3).join('、')}意象，留白意境`;
+      const r = await fetch('/api/inkpaint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || '生成失败');
+      setInkUrl(d.url);
+      show('意境图已生成，导出分享图将自动收录该配图');
+    } catch (e: any) {
+      setInkError(e?.message || '意境图生成失败，请重试');
+    } finally {
+      setInkLoading(false);
+    }
+  }
 
   /** 中断当前流式生成，已流式内容保留 */
   function stopGenerate() {
@@ -717,6 +751,47 @@ export function AnnotateView() {
                   </div>
                 )}
 
+                {isDone && selected && (
+                  <div className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
+                        <Palette className="h-3.5 w-3.5 text-sepia" /> 水墨意境配图 · 按诗中意象自动生成
+                      </div>
+                      {inkUrl && !inkLoading && (
+                        <button onClick={genInk} className="font-ui text-xs text-muted-blue transition-ink hover:underline">重新生成</button>
+                      )}
+                    </div>
+                    {selected.tags.length > 0 && (
+                      <p className="mt-1.5 font-ui text-xs text-ink-soft">
+                        绘图灵感：{selected.tags.slice(0, 4).join('、')} ——「{selected.first.slice(0, 20)}…」
+                      </p>
+                    )}
+                    {inkLoading && (
+                      <div className="mt-3 flex h-40 items-center justify-center rounded-lg" style={{ background: 'var(--paper-light)' }}>
+                        <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
+                        <span className="ml-2 font-ui text-xs text-ink-soft">CogView 正在挥毫…</span>
+                      </div>
+                    )}
+                    {inkError && (
+                      <p className="mt-3 font-ui text-xs" style={{ color: '#A67C7C' }}>
+                        {inkError}{' '}
+                        <button onClick={genInk} className="text-muted-blue transition-ink hover:underline">重试</button>
+                      </p>
+                    )}
+                    {inkUrl && (
+                      <img src={inkUrl} alt={`《${selected.title}》水墨意境图`} className="mt-3 w-full rounded-lg" loading="lazy" />
+                    )}
+                    {!inkUrl && !inkLoading && !inkError && (
+                      <button
+                        onClick={genInk}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+                      >
+                        <Palette className="h-3.5 w-3.5" /> 生成意境配图
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {isDone && (
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex items-center gap-2">
@@ -758,6 +833,7 @@ export function AnnotateView() {
               tag: d.tag,
               content: d.content.length > 140 ? `${d.content.slice(0, 140)}…` : d.content || '（无内容）',
             }))}
+            image={inkUrl || undefined}
             footer={`${stream.model} · 耗时 ${((stream.latencyMs ?? 0) / 1000).toFixed(1)}s · ${new Date().toLocaleDateString('zh-CN')}`}
           />
         </div>

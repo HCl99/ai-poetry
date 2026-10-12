@@ -30,6 +30,8 @@ export function TransferView() {
   const [speaking, setSpeaking] = useState(false);
   const [inkUrl, setInkUrl] = useState('');
   const [inkLoading, setInkLoading] = useState(false);
+  const [inkError, setInkError] = useState(false);
+  const [inkZoom, setInkZoom] = useState(false);
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const startRef = useRef(0);
@@ -60,6 +62,8 @@ export function TransferView() {
   async function inkpaint() {
     if (inkLoading || !poem) return;
     setInkLoading(true);
+    setInkError(false);
+    setInkUrl('');
     try {
       const r = await fetch('/api/inkpaint', {
         method: 'POST',
@@ -71,7 +75,8 @@ export function TransferView() {
       setInkUrl(d.url);
       show('水墨意境图已生成');
     } catch (e: any) {
-      show(e.message || '意境图生成失败');
+      setInkError(true);
+      show(e.message || '意境图生成失败，可重试');
     } finally {
       setInkLoading(false);
     }
@@ -90,6 +95,8 @@ export function TransferView() {
     setDoneInfo(null);
     setStepText('');
     setInkUrl('');
+    setInkError(false);
+    setInkZoom(false);
     setSpeaking(false);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     try {
@@ -316,13 +323,48 @@ export function TransferView() {
                   </button>
                 </div>
               )}
-              {inkUrl && (
+              {(inkLoading || inkError || inkUrl) && (
                 <div className="mt-3 overflow-hidden rounded-lg anim-fade-up" style={{ border: '1px solid #D4CFC5' }}>
+                  {inkLoading && (
+                    <div className="flex flex-col items-center justify-center py-14" style={{ background: '#F5F2EC' }}>
+                      <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
+                      <p className="mt-3 font-ui text-xs text-ink-soft">CogView-3 正在晕染墨色，约 20 秒…</p>
+                    </div>
+                  )}
+                  {inkError && !inkLoading && (
+                    <div className="flex flex-col items-center justify-center py-10" style={{ background: '#F5F2EC' }}>
+                      <ImageIcon className="h-8 w-8 text-ink-soft/40" strokeWidth={1.5} />
+                      <p className="mt-2 font-ui text-xs" style={{ color: '#A67C7C' }}>意境图生成失败</p>
+                      <button
+                        onClick={inkpaint}
+                        className="mt-3 rounded-lg px-4 py-1.5 font-ui text-xs text-white transition-ink hover:-translate-y-0.5"
+                        style={{ background: '#3A3835' }}
+                      >
+                        重试
+                      </button>
+                    </div>
+                  )}
+                  {inkUrl && !inkLoading && (
+                    <>
+                      <button onClick={() => setInkZoom(true)} className="block w-full cursor-zoom-in" title="点击放大">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={inkUrl} alt="水墨意境图" className="w-full object-cover" />
+                      </button>
+                      <p className="flex items-center justify-center gap-3 bg-white/60 px-3 py-1.5 font-ui text-xs text-ink-soft">
+                        <span>CogView-3-Flash 水墨意境图 · 点击放大</span>
+                        <a href={inkUrl} target="_blank" rel="noreferrer" className="text-muted-blue transition-ink hover:underline">查看原图</a>
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              {inkZoom && inkUrl && (
+                <div
+                  className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/70 p-6 anim-fade-in"
+                  onClick={() => setInkZoom(false)}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={inkUrl} alt="水墨意境图" className="w-full object-cover" />
-                  <p className="bg-white/60 px-3 py-1.5 text-center font-ui text-xs text-ink-soft">
-                    CogView-3-Flash 水墨意境图 · 依据生成诗词绘制
-                  </p>
+                  <img src={inkUrl} alt="水墨意境图（放大）" className="max-h-full max-w-full rounded-lg" style={{ boxShadow: '0 16px 64px rgba(0,0,0,0.5)' }} />
                 </div>
               )}
             </div>

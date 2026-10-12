@@ -1,7 +1,5 @@
 'use client';
 
-import html2canvas from 'html2canvas';
-
 export interface ShareSection {
   tag: string;
   content: string;
@@ -117,8 +115,9 @@ export function ShareCard({ kind, title, subtitle, poemLines, sections, note, im
   );
 }
 
-/** 将离屏分享卡合成为 PNG 并触发下载 */
+/** 将离屏分享卡合成为 PNG 并触发下载（html2canvas 按需加载，~200KB 不进首屏包） */
 export async function downloadSharePng(el: HTMLElement, filename: string) {
+  const { default: html2canvas } = await import('html2canvas');
   const canvas = await html2canvas(el, { backgroundColor: '#FAF8F3', scale: 2, useCORS: true });
   const a = document.createElement('a');
   a.href = canvas.toDataURL('image/png');

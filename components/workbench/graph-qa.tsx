@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, MessageCircleQuestion, Send, Square, Database } from 'lucide-react';
+import { ChevronDown, ChevronUp, MessageCircleQuestion, Send, Square, Database, Bot, ShieldCheck } from 'lucide-react';
 import { sseEvents } from '@/lib/sse';
 
 const KIND_META = {
   poet: {
-    hint: (f: string) => `围绕「${f}」提问，AI 仅依据图谱中的真实互提关系作答`,
+    hint: (f: string) => `围绕「${f}」提问，AI Agent 自主调用图谱查询工具，仅依据真实互提关系作答`,
     quick: (f: string) => [
       `「${f}」与哪些诗人交往最密切？`,
       `「${f}」对后世诗人有何影响？`,
@@ -14,7 +14,7 @@ const KIND_META = {
     ],
   },
   imagery: {
-    hint: (f: string) => `围绕意象「${f}」提问，AI 仅依据共现数据与真实诗例作答`,
+    hint: (f: string) => `围绕意象「${f}」提问，AI Agent 自主检索共现数据与真实诗例作答`,
     quick: (f: string) => [
       `意象「${f}」常与哪些意象共现？`,
       `「${f}」承载了哪些情感？`,
@@ -23,14 +23,16 @@ const KIND_META = {
   },
 } as const;
 
-/** 图谱问答面板（GraphRAG）：两个图谱页共用，随焦点切换上下文 */
+/** 图谱问答面板（GraphRAG Agent）：两个图谱页共用，随焦点切换上下文 */
 export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus: string }) {
   const meta = KIND_META[kind];
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
+  const [steps, setSteps] = useState<{ label: string; detail?: string }[]>([]);
   const [context, setContext] = useState<string[]>([]);
+  const [citations, setCitations] = useState<{ total: number; valid: string[]; invalid: string[] } | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +46,9 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
     abortRef.current?.abort();
     setQuestion('');
     setAnswer('');
+    setSteps([]);
     setContext([]);
+    setCitations(null);
     setLatency(null);
     setError('');
     setInput('');
@@ -61,7 +65,9 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
     setBusy(true);
     setQuestion(q.trim());
     setAnswer('');
+    setSteps([]);
     setContext([]);
+    setCitations(null);
     setLatency(null);
     setError('');
     try {
@@ -77,8 +83,10 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
       }
       for await (const { event, data } of sseEvents(r)) {
         if (event === 'delta') setAnswer((a) => a + (data.text || ''));
+        else if (event === 'step') setSteps((s) => [...s, { label: data.label, detail: data.detail }]);
         else if (event === 'done') {
           setContext(data.context || []);
+          setCitations(data.citations || null);
           setLatency(data.latencyMs ?? null);
         } else if (event === 'error') throw new Error(data.error || '图谱问答失败');
       }
@@ -99,8 +107,8 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
         <span className="flex items-center gap-2.5">
           <MessageCircleQuestion className="h-4.5 w-4.5 text-muted-blue" style={{ height: 18, width: 18 }} />
           <span>
-            <span className="font-ui text-[15px] font-medium text-ink-deep">图谱问答 · GraphRAG</span>
-            <span className="ml-2 font-ui text-xs text-ink-soft">从可视化到可问答，仅依据图谱真实数据作答</span>
+            <span className="font-ui text-[15px] font-medium text-ink-deep">图谱问答 · GraphRAG Agent</span>
+            <span className="ml-2 font-ui text-xs text-ink-soft">AI 自主调用图谱查询工具，依据真实数据作答</span>
           </span>
         </span>
         {open ? <ChevronUp className="h-4 w-4 text-ink-soft" /> : <ChevronDown className="h-4 w-4 text-ink-soft" />}
@@ -120,6 +128,18 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
           )}
           {(answer || busy || error) && (
             <div ref={boxRef} className="max-h-60 overflow-y-auto rounded-xl rounded-bl-sm px-3.5 py-2.5" style={{ background: 'var(--inset)' }}>
+              {/* Agent 工具调用轨迹：实时可视化思考过程 */}
+              {steps.length > 0 && (busy || !answer) && (
+                <div className="mb-2.5 space-y-1.5 border-b border-dashed border-[#C9CFD6] pb-2">
+                  {steps.map((st, i) => (
+                    <div key={i} className="flex items-start gap-1.5 font-ui text-xs">
+                      <Bot className="mt-0.5 h-3 w-3 shrink-0 text-muted-blue" />
+                      <span className="text-ink-mid">{st.label}</span>
+                      {st.detail && <span className="truncate text-ink-soft/80">· {st.detail}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {error ? (
                 <span className="font-ui text-sm text-[#A67C7C]">{error}</span>
               ) : (
@@ -131,18 +151,26 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
             </div>
           )}
 
-          {/* 引用依据：图谱子图数据 */}
-          {!busy && context.length > 0 && (
+          {/* 引用依据：Agent 工具轨迹 + 引用校验 */}
+          {!busy && (context.length > 0 || citations) && (
             <div className="rounded-lg p-3" style={{ background: 'rgba(107,142,123,0.10)', border: '1px solid rgba(107,142,123,0.25)' }}>
               <div className="mb-1.5 flex items-center gap-1.5 font-ui text-xs font-medium" style={{ color: '#4E6E5D' }}>
                 <Database style={{ height: 13, width: 13 }} />
-                依据图谱数据 · {latency != null ? `${latency}ms` : ''}
+                Agent 工具轨迹 · {latency != null ? `${latency}ms` : ''}
               </div>
               <ul className="space-y-1">
                 {context.map((c, i) => (
                   <li key={i} className="font-ui text-xs leading-relaxed" style={{ color: '#5E7A6A' }}>· {c}</li>
                 ))}
               </ul>
+              {citations && citations.total > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 border-t border-dashed pt-2 font-ui text-xs" style={{ borderColor: 'rgba(107,142,123,0.25)', color: citations.invalid.length === 0 ? '#4E6E5D' : '#A67C7C' }}>
+                  <ShieldCheck style={{ height: 13, width: 13 }} />
+                  {citations.invalid.length === 0
+                    ? `引用校验通过：${citations.total} 处引用全部来自工具召回的诗篇`
+                    : `引用越界 ${citations.invalid.length} 处已拦截：${citations.invalid.join('、')}`}
+                </div>
+              )}
             </div>
           )}
 

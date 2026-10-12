@@ -1,7 +1,8 @@
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { AGENT_TOOLS, executeAgentTool } from '@/lib/agentTools';
+import { checkCitations } from '@/lib/citationCheck';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -12,9 +13,14 @@ const client = new OpenAI({
   baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
 });
 
-type Row = { s: string; t: string; w: number };
+const MAX_TOOL_ROUNDS = 4;
 
-/** 图谱问答（GraphRAG）：从关系库抽取问题相关子图，仅依据子图数据回答 */
+/**
+ * 图谱问答（Function Calling Agent）：
+ * 模型自主规划并调用图谱查询工具（诗人互提/意象共现/诗篇检索/全图概览），
+ * 工具结果回填对话循环作答；最终回答执行引用硬约束校验，
+ * 只允许引用工具召回的诗题，杜绝编造。
+ */
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
@@ -26,112 +32,98 @@ export async function POST(req: Request) {
   if (kind !== 'poet' && kind !== 'imagery') return Response.json({ error: 'kind 必须是 poet 或 imagery' }, { status: 400 });
 
   const q = question.trim().slice(0, 100);
-  const ctxLines: string[] = [];
-
-  if (kind === 'poet') {
-    // 全部诗人名（去重），按长度降序匹配问题中出现的名字（最多 2 位）
-    const nameRows = await prisma.$queryRaw<{ n: string }[]>`
-      SELECT DISTINCT source AS n FROM poet_relations
-      UNION DISTINCT SELECT target AS n FROM poet_relations`;
-    const names = nameRows.map((r) => r.n);
-    const matched = names.filter((n) => q.includes(n)).sort((a, b) => b.length - a.length).slice(0, 2);
-
-    if (matched.length === 0) {
-      // 未命中具体诗人 → 全局摘要
-      const total = await prisma.poetRelation.aggregate({ _count: true, _sum: { weight: true } });
-      const top = await prisma.poetRelation.groupBy({ by: ['source'], _sum: { weight: true }, orderBy: { _sum: { weight: 'desc' } }, take: 3 });
-      ctxLines.push(`全图共 ${total._count} 条诗人互提关联边，互提总次数 ${total._sum.weight || 0}`);
-      for (const t of top) {
-        const bio = await prisma.poetBio.findFirst({ where: { name: t.source }, select: { dynasty: true } });
-        ctxLines.push(`「${t.source}」（${bio?.dynasty || '唐'}）关联最广，互提总权重 ${t._sum.weight || 0}`);
-      }
-    } else {
-      for (const name of matched) {
-        const bio = await prisma.poetBio.findFirst({ where: { name }, select: { dynasty: true } });
-        const edges = (await prisma.$queryRaw<Row[]>`
-          SELECT source AS s, target AS t, weight AS w FROM poet_relations
-          WHERE source = ${name} OR target = ${name}
-          ORDER BY weight DESC LIMIT 8`) as Row[];
-        const deg = await prisma.poetRelation.count({ where: { OR: [{ source: name }, { target: name }] } });
-        // 关系库含双向边，按无向对去重后取关系最近的几位
-        const seen = new Set<string>();
-        const uniq = edges.filter((e) => {
-          const key = [e.s, e.t].sort().join('|');
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        const rel = uniq
-          .map((e) => `${e.s === name ? e.t : e.s}（互提 ${e.w} 次）`)
-          .join('、');
-        ctxLines.push(`「${name}」〔${bio?.dynasty || '唐'}〕共关联 ${deg} 位诗人，关系最近的包括：${rel}`);
-      }
-    }
-  } else {
-    // 意象问答
-    const chars = (await prisma.imagery.findMany({ orderBy: { count: 'desc' }, take: 200 })).map((i) => i.char);
-    const matched = chars.filter((c) => q.includes(c)).slice(0, 2);
-
-    if (matched.length === 0) {
-      const total = await prisma.imagery.aggregate({ _count: true });
-      const top = await prisma.imagery.findMany({ orderBy: { count: 'desc' }, take: 5 });
-      ctxLines.push(`意象库共 ${total._count} 个核心意象`);
-      ctxLines.push(`出现最多的意象：${top.map((t) => `「${t.char}」${t.count} 首`).join('、')}`);
-    } else {
-      for (const c of matched) {
-        const im = await prisma.imagery.findUnique({ where: { char: c } });
-        const co = (await prisma.$queryRaw<Row[]>`
-          SELECT source_char AS s, target_char AS t, weight AS w FROM imagery_cooccurrence
-          WHERE source_char = ${c} OR target_char = ${c}
-          ORDER BY weight DESC LIMIT 8`) as Row[];
-        const rel = co.map((e) => `「${e.s === c ? e.t : e.s}」共现 ${e.w} 次`).join('、');
-        const samples = await prisma.poemImagery.findMany({
-          where: { imageryChar: c },
-          take: 3,
-          include: { poem: { select: { title: true, author: true } } },
-        });
-        ctxLines.push(
-          `意象「${c}」出现在 ${im?.count || 0} 首诗中；共现最强的意象：${rel || '暂无'}；含该意象的诗例：${samples
-            .map((s) => `《${s.poem.title}》${s.poem.author}`)
-            .join('、') || '暂无'}`,
-        );
-      }
-    }
-  }
-
   const t0 = Date.now();
   const model = 'glm-4-flash';
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
       try {
-        const prompt = `以下是知识图谱中与问题相关的真实数据：
+        send('step', { label: 'Agent 规划', detail: '解析问题，自主选择图谱查询工具' });
 
-${ctxLines.join('\n')}
+        const messages: Record<string, unknown>[] = [
+          {
+            role: 'system',
+            content: `你是古典诗词知识图谱问答助手（Agent），必须通过调用工具获取库内真实数据后作答。
+工具选择：诗人交往/影响类问题用 search_poet_relations；意象象征/情感类问题用 search_imagery；查证诗句出处或举例用 search_poems；总体概况用 get_graph_overview。
+硬性规则：
+1. 回答前必须至少调用一次工具，禁止凭记忆直接回答；
+2. 工具调用不超过 ${MAX_TOOL_ROUNDS} 轮；
+3. 仅依据工具返回的数据回答，数字、次数、关系必须与工具结果一致；
+4. 引用诗篇时用《诗题》标注，且只能引用工具结果中出现过的诗题；
+5. 数据不足时明确说明「图谱暂无该数据」，严禁编造。
+当前场景：${kind === 'poet' ? '诗人关系图谱' : '意象共现图谱'}。回答 120 字以内。`,
+          },
+          { role: 'user', content: q },
+        ];
 
-【用户问题】${q}
+        const retrievedTitles = new Set<string>();
+        const toolTrail: string[] = [];
+        let rounds = 0;
+        let directAnswer = '';
 
-请仅依据上述图谱数据回答，120 字以内。数据中的次数、数量可以直接引用；若数据不足以回答问题的某个部分，请明确说明「图谱暂无该数据」，严禁编造任何数字或关系。`;
-
-        const resp = await client.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: '你是诗词知识图谱分析助手，严格基于给定图数据回答，不编造。' },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.3,
-          max_tokens: 400,
-          stream: true,
-        });
-        let full = '';
-        for await (const chunk of resp) {
-          const delta = chunk.choices?.[0]?.delta?.content || '';
-          if (delta) {
-            full += delta;
-            send('delta', { text: delta });
+        // Agent 循环：工具轮非流式以拿完整 tool_calls
+        while (rounds < MAX_TOOL_ROUNDS) {
+          rounds++;
+          const resp = await client.chat.completions.create({
+            model,
+            messages: messages as never,
+            tools: AGENT_TOOLS as never,
+            temperature: 0.3,
+            max_tokens: 600,
+          });
+          const msg = resp.choices?.[0]?.message;
+          const calls = msg?.tool_calls || [];
+          if (!calls.length) {
+            directAnswer = msg?.content || '';
+            break;
+          }
+          messages.push(msg as never);
+          for (const tc of calls) {
+            if (!('function' in tc) || !tc.function) continue;
+            const fn = tc.function.name || '';
+            const argsStr = tc.function.arguments || '{}';
+            send('step', { label: `Agent 调用工具 ${fn}`, detail: argsStr.slice(0, 80) });
+            const { text, poemTitles } = await executeAgentTool(fn, argsStr);
+            poemTitles.forEach((t) => retrievedTitles.add(t));
+            toolTrail.push(`${fn} → ${text.slice(0, 80)}`);
+            send('step', { label: '工具返回', detail: text.slice(0, 110) });
+            messages.push({ role: 'tool', tool_call_id: tc.id, content: text } as never);
           }
         }
-        send('done', { latencyMs: Date.now() - t0, model, context: ctxLines });
+
+        let full = directAnswer;
+        if (full) {
+          // 模型未调工具直接作答（罕见）：一次性透出
+          send('delta', { text: full });
+        } else {
+          // 最终流式回答：工具已应答，收束输出（不带 tools）
+          send('step', { label: '生成回答', detail: `依据 ${retrievedTitles.size} 篇工具召回数据` });
+          const finalResp = await client.chat.completions.create({
+            model,
+            messages: messages as never,
+            temperature: 0.3,
+            max_tokens: 400,
+            stream: true,
+          });
+          for await (const chunk of finalResp) {
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              full += delta;
+              send('delta', { text: delta });
+            }
+          }
+        }
+
+        // 引用硬约束：只允许引用工具召回的诗题
+        const cite = checkCitations(full, '', [...retrievedTitles]);
+        send('done', {
+          latencyMs: Date.now() - t0,
+          model,
+          context: toolTrail,
+          citations: { total: cite.total, valid: cite.valid, invalid: cite.invalid },
+          agentRounds: rounds,
+        });
       } catch (e: any) {
         console.error('graph-qa error', e?.message || e);
         send('error', { error: '图谱问答失败，请重试' });

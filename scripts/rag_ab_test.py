@@ -135,13 +135,18 @@ def topk(ids, mat, qv, exclude, k=20):
     return out
 
 
-def check_citations(ans, retrieved_titles, own_title, conn):
-    """引用归因三分法：提取《》标题，对比检索结果与全库，识别幻觉引用
+def check_citations(ans, retrieved_titles, own_title, title_set):
+    """引用归因三分法 + 格式违规单列：
+    - 标题比对按去空白归一化（库内标题常含排版空格，如《缘识  其一六》）
+    - 《》内含句读标点（，。；、？！）或长度>12 且未命中检索结果的条目，
+      视为"诗句/碎片摘录"计入格式违规，不计入幻觉引用
     典籍匹配：精确匹配，或《书名·篇名》/《书名:篇名》的书名部分在白名单内
     """
     cited = set(re.findall(r"《([^》]{1,30})》", ans))
     cited.discard(own_title)
-    grounded, in_corpus, hallucinated = [], [], []
+    norm = lambda s: re.sub(r"\s+", "", s)
+    retrieved_n = {norm(t) for t in retrieved_titles}
+    grounded, in_corpus, hallucinated, format_violation = [], [], [], []
 
     def is_canon(t):
         if t in CANON:
@@ -150,19 +155,19 @@ def check_citations(ans, retrieved_titles, own_title, conn):
         head = re.split(r"[·:：]", t, maxsplit=1)[0].strip()
         return head in CANON
 
-    with conn.cursor() as cur:
-        for t in sorted(cited):
-            if t in retrieved_titles:
-                grounded.append(t)
-            elif is_canon(t):
-                in_corpus.append(t)  # 典籍名按真实引用处理
-            else:
-                cur.execute("SELECT 1 FROM poems WHERE title=%s LIMIT 1", (t,))
-                if cur.fetchone():
-                    in_corpus.append(t)  # 库内真实存在但未被检索（模型内知识）
-                else:
-                    hallucinated.append(t)  # 库外幻觉
-    return grounded, in_corpus, hallucinated
+    for t in sorted(cited):
+        tn = norm(t)
+        if tn in retrieved_n:
+            grounded.append(t)
+        elif re.search(r"[，。；、？！]", t) or len(t) > 12:
+            format_violation.append(t)  # 诗句/碎片摘录，非诗题声明
+        elif is_canon(t):
+            in_corpus.append(t)  # 典籍名按真实引用处理
+        elif tn in title_set:
+            in_corpus.append(t)  # 库内真实存在但未被检索（模型内知识）
+        else:
+            hallucinated.append(t)  # 库外幻觉
+    return grounded, in_corpus, hallucinated, format_violation
 
 
 def build_prompt(title, dynasty, author, body, bio_ctx, related_ctx):
@@ -174,8 +179,10 @@ def build_prompt(title, dynasty, author, body, bio_ctx, related_ctx):
     ctx_block = f"\n【参考上下文（知识库检索结果）】\n{ctx}\n" if ctx else "\n"
     citation_rule = """
 【引用要求】
-1. 在【典故溯源】和【情感分析】中，若引用了某首其他诗篇作为论据，必须标注来源诗篇名，使用《书名号》
-2. 最后在【引用诗篇】中列出所有被引用的诗篇名（一行一个，使用《书名号》）""" if related_ctx else ""
+1. 引用硬约束：仅允许引用上述"语义相似诗篇"列表中出现的诗篇作为论据，严禁引用列表之外的诗篇，不得杜撰诗题
+2. 《书名号》内只允许填写诗篇标题本身，严禁将诗句、文句或"书名号"等占位文字写入《》内
+3. 在【典故溯源】和【情感分析】中引用时，必须标注来源诗篇名，使用《书名号》
+4. 最后在【引用诗篇】中列出所有被引用的诗篇名（一行一个，使用《书名号》；若未引用任何诗篇则输出"无"）""" if related_ctx else ""
     return f"""你是一位资深古典文学研究专家。请对下面这首诗进行四维度学术注解。
 
 【诗词】《{title}》〔{dynasty}〕{author}
@@ -228,6 +235,12 @@ def main():
     )
     ids, mat = load_corpus(conn)
     idset = set(ids)
+
+    # 全库诗题归一化集合（幻觉判定用，去空白避免排版空格误判）
+    with conn.cursor() as cur:
+        cur.execute("SELECT title FROM poems")
+        title_set = {re.sub(r"\s+", "", r[0]) for r in cur.fetchall()}
+    print(f"[corpus] 诗题集合 {len(title_set)} 条（去空白归一化）")
 
     # 选样：两组对照（固定种子可复现）
     # 随机组：任意有小传的诗；冷门组：小传 <100 字的长尾诗人（模型知识薄弱区）
@@ -315,19 +328,19 @@ def main():
 
             # 引用归因三分法（两个回答都统计，对比幻觉率）
             retrieved = {m["title"] for m in related_meta}
-            g_rag, c_rag, h_rag = check_citations(ans_rag, retrieved, p["title"], conn)
-            g_base, c_base, h_base = check_citations(ans_base, retrieved, p["title"], conn)
+            g_rag, c_rag, h_rag, f_rag = check_citations(ans_rag, retrieved, p["title"], title_set)
+            g_base, c_base, h_base, f_base = check_citations(ans_base, retrieved, p["title"], title_set)
 
             results.append({"poem": p, "related": related_meta, "bio": bool(bio_ctx), "group": group_name,
                             "rag": ans_rag, "base": ans_base, "s_rag": s_rag, "s_base": s_base,
                             "reason": reason,
-                            "cite_rag": {"grounded": g_rag, "in_corpus": c_rag, "hallucinated": h_rag},
-                            "cite_base": {"grounded": g_base, "in_corpus": c_base, "hallucinated": h_base}})
+                            "cite_rag": {"grounded": g_rag, "in_corpus": c_rag, "hallucinated": h_rag, "format": f_rag},
+                            "cite_base": {"grounded": g_base, "in_corpus": c_base, "hallucinated": h_base, "format": f_base}})
             sr = s_rag or {}
             sb2 = s_base or {}
             print(f"  有检索 zhengti={sr.get('zhengti')} vs 无检索 zhengti={sb2.get('zhengti')}")
-            print(f"  引用归因 RAG: 命中{g_rag} 库内{c_rag} 幻觉{h_rag}")
-            print(f"  引用归因 BASE: 命中{g_base} 库内{c_base} 幻觉{h_base}")
+            print(f"  引用归因 RAG: 命中{g_rag} 库内{c_rag} 幻觉{h_rag} 格式违规{f_rag}")
+            print(f"  引用归因 BASE: 命中{g_base} 库内{c_base} 幻觉{h_base} 格式违规{f_base}")
 
     # 汇总
     dims = ["dianjia", "yixiang", "fengfu", "zhengti"]
@@ -346,13 +359,14 @@ def main():
         return w, t, len(rs) - w - t
 
     def cite_summary(rs):
-        """幻觉引用率 = 幻觉引用数 / 总引用数；以及命中检索的归因率"""
+        """幻觉引用率 = 幻觉引用数 / 总引用数（格式违规单列，不计入幻觉）"""
         def agg(key):
             g = sum(len(r[key]["grounded"]) for r in rs)
             c = sum(len(r[key]["in_corpus"]) for r in rs)
             h = sum(len(r[key]["hallucinated"]) for r in rs)
+            fv = sum(len(r[key]["format"]) for r in rs)
             total = g + c + h
-            return g, c, h, total
+            return g, c, h, fv, total
         return agg("cite_rag"), agg("cite_base")
 
     print("\n========== 汇总（GLM-4-Flash 盲评，1-10） ==========")
@@ -367,20 +381,20 @@ def main():
         for d in dims:
             print(f"{dim_names[d]:<10}{a_rag[d]:>12}{a_base[d]:>10}{round(a_rag[d] - a_base[d], 2):>8}")
         print(f"整体质量胜负：RAG 胜 {w} / 平 {t} / 负 {l}")
-        (g1, c1, h1, t1), (g2, c2, h2, t2) = cite_summary(rs)
+        (g1, c1, h1, f1, t1), (g2, c2, h2, f2, t2) = cite_summary(rs)
         hr_rag = round(h1 / t1 * 100, 1) if t1 else 0
         hr_base = round(h2 / t2 * 100, 1) if t2 else 0
-        print(f"引用归因 RAG : 命中检索 {g1} / 库内真实 {c1} / 幻觉 {h1}（幻觉率 {hr_rag}%）")
-        print(f"引用归因 BASE: 命中检索 {g2} / 库内真实 {c2} / 幻觉 {h2}（幻觉率 {hr_base}%）")
+        print(f"引用归因 RAG : 命中检索 {g1} / 库内真实 {c1} / 幻觉 {h1}（幻觉率 {hr_rag}%）/ 格式违规 {f1}")
+        print(f"引用归因 BASE: 命中检索 {g2} / 库内真实 {c2} / 幻觉 {h2}（幻觉率 {hr_base}%）/ 格式违规 {f2}")
 
     os.makedirs(os.path.join(ROOT, "docs"), exist_ok=True)
     with open(os.path.join(ROOT, "docs", "rag_ab_report.md"), "w", encoding="utf-8") as f:
         f.write(f"""# RAG 有/无检索 A/B 对照实验报告
 
 > 实验日期：{time.strftime('%Y-%m-%d')} · 检索：BAAI/bge-small-zh-v1.5 向量粗排 top20 + BAAI/bge-reranker-base 精排 top5（语料 {len(ids)} 篇）· 生成模型：{LLM_MODEL}（temperature 0.6）
-> 方法：对照实验，RAG 组注入检索上下文（诗人小传 + 两级检索相似诗篇）并按生产系统要求标注引用来源，BASE 组无检索上下文；两个回答匿名乱序后由 {LLM_MODEL} 盲评打分（1-10），评分维度：典故可信 / 意象关联 / 信息丰富 / 整体质量。
+> 方法：对照实验，RAG 组注入检索上下文（诗人小传 + 两级检索相似诗篇）并施加引用硬约束（仅允许引用检索列表中的诗篇、《》内只填诗题），BASE 组无检索上下文；两个回答匿名乱序后由 {LLM_MODEL} 盲评打分（1-10），评分维度：典故可信 / 意象关联 / 信息丰富 / 整体质量。
 > 分组：**随机组**（任意有小传的诗）考察普遍效果；**冷门诗人组**（小传 <100 字的长尾诗人）考察模型知识薄弱区检索的增益。
-> 引用归因三分法：回答中引用的《诗题》依次判定为 **命中检索**（出现在检索结果）、**库内真实**（存在于 5.7 万篇诗库/典籍白名单但未被检索）、**幻觉**（诗库中不存在的杜撰篇名）。
+> 引用归因三分法：回答中引用的《诗题》按去空白归一化依次判定为 **命中检索**（出现在检索结果）、**库内真实**（存在于 5.7 万篇诗库/典籍白名单但未被检索）、**幻觉**（诗库中不存在的杜撰篇名）；**格式违规**（《》内摘录诗句/碎片而非诗题）单列，不计入幻觉。
 
 ## 一、盲评得分汇总
 """)
@@ -398,26 +412,26 @@ def main():
         f.write("""
 ## 二、引用归因与幻觉率对比
 
-> 幻觉引用 = 回答中提到的《诗题》在 5.7 万篇诗库中完全不存在（典型大模型杜撰）。
+> 幻觉引用 = 回答中提到的《诗题》在 5.7 万篇诗库中完全不存在（典型大模型杜撰）；格式违规 =《》内摘录诗句/碎片而非诗题，单列不计入幻觉率。
 
-| 分组 | 回答 | 命中检索 | 库内真实 | 幻觉引用 | 幻觉率 |
-| --- | --- | --- | --- | --- | --- |
+| 分组 | 回答 | 命中检索 | 库内真实 | 幻觉引用 | 幻觉率 | 格式违规 |
+| --- | --- | --- | --- | --- | --- | --- |
 """)
         for name, label in [("random", "随机组"), ("cold", "冷门诗人组"), ("all", "全部样本")]:
             rs = results if name == "all" else [r for r in results if r["group"] == name]
             if not rs:
                 continue
-            (g1, c1, h1, t1), (g2, c2, h2, t2) = cite_summary(rs)
+            (g1, c1, h1, f1, t1), (g2, c2, h2, f2, t2) = cite_summary(rs)
             hr_rag = round(h1 / t1 * 100, 1) if t1 else 0
             hr_base = round(h2 / t2 * 100, 1) if t2 else 0
-            f.write(f"| {label} | 有检索 RAG | {g1} | {c1} | {h1} | **{hr_rag}%** |\n")
-            f.write(f"| {label} | 无检索 | {g2} | {c2} | {h2} | **{hr_base}%** |\n")
+            f.write(f"| {label} | 有检索 RAG | {g1} | {c1} | {h1} | **{hr_rag}%** | {f1} |\n")
+            f.write(f"| {label} | 无检索 | {g2} | {c2} | {h2} | **{hr_base}%** | {f2} |\n")
 
         f.write("""
 ## 三、逐样本引用归因明细
 
-| 样本 | 分组 | 回答 | 命中检索 | 库内真实 | 幻觉引用 |
-| --- | --- | --- | --- | --- | --- |
+| 样本 | 分组 | 回答 | 命中检索 | 库内真实 | 幻觉引用 | 格式违规 |
+| --- | --- | --- | --- | --- | --- | --- |
 """)
         for r in results:
             name = f"《{r['poem']['title']}》{r['poem']['author']}"
@@ -426,7 +440,8 @@ def main():
                 g = "、".join(f"《{t}》" for t in c["grounded"]) or "—"
                 ic = "、".join(f"《{t}》" for t in c["in_corpus"]) or "—"
                 h = "、".join(f"《{t}》" for t in c["hallucinated"]) or "—"
-                f.write(f"| {name} | {r['group']} | {arm} | {g} | {ic} | {h} |\n")
+                fv = "、".join(f"《{t}》" for t in c["format"]) or "—"
+                f.write(f"| {name} | {r['group']} | {arm} | {g} | {ic} | {h} | {fv} |\n")
 
         f.write("""
 ## 四、检索命中示例（grounding）

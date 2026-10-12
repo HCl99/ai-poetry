@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Heart, Send, Undo2, Users, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Heart, Send, Undo2, Users, Loader2, ScrollText } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { ScrollCard } from './scroll-card';
+import { downloadSharePng } from './share-card';
 
 interface CreationItem {
   id: string;
@@ -34,7 +36,25 @@ export function CommunityView() {
   const [feed, setFeed] = useState<CreationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
+  const [scrollTarget, setScrollTarget] = useState<CreationItem | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { msg, show } = useToast();
+
+  /** 导出诗画长卷 PNG：社区创作 → 竖排右起长卷图 */
+  async function exportScroll(c: CreationItem) {
+    if (scrollTarget) return;
+    setScrollTarget(c);
+    await new Promise((r) => setTimeout(r, 150));
+    try {
+      if (!scrollRef.current) throw new Error();
+      await downloadSharePng(scrollRef.current, `诗画长卷-${c.style}-${Date.now()}.png`);
+      show('已导出诗画长卷');
+    } catch {
+      show('长卷导出失败，请重试');
+    } finally {
+      setScrollTarget(null);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -165,7 +185,20 @@ export function CommunityView() {
                       <p className="mt-3 font-brush text-lg leading-relaxed text-ink-deep" style={{ whiteSpace: 'pre-line' }}>
                         {c.content}
                       </p>
-                      <p className="mt-2 truncate font-ui text-xs text-ink-soft">灵感：{c.excerpt} · {fmtTime(c.createdAt)}</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="truncate font-ui text-xs text-ink-soft">灵感：{c.excerpt} · {fmtTime(c.createdAt)}</p>
+                        <button
+                          onClick={() => exportScroll(c)}
+                          disabled={scrollTarget?.id === c.id}
+                          className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-50"
+                          title="导出诗画长卷 PNG"
+                        >
+                          {scrollTarget?.id === c.id
+                            ? <Loader2 style={{ height: 12, width: 12 }} className="animate-spin" />
+                            : <ScrollText style={{ height: 12, width: 12 }} />}
+                          长卷
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -216,6 +249,18 @@ export function CommunityView() {
                             {c.likes}
                           </button>
                           {c.isMine && <span className="font-ui text-xs" style={{ color: '#6B8E7B' }}>我的作品</span>}
+                          <button
+                            onClick={() => exportScroll(c)}
+                            disabled={scrollTarget?.id === c.id}
+                            className="flex items-center gap-1 rounded-full px-3 py-1.5 font-ui text-xs transition-ink hover:scale-105 disabled:opacity-50"
+                            style={{ background: 'var(--inset)', color: '#8B857A' }}
+                            title="导出诗画长卷 PNG"
+                          >
+                            {scrollTarget?.id === c.id
+                              ? <Loader2 style={{ height: 12, width: 12 }} className="animate-spin" />
+                              : <ScrollText style={{ height: 12, width: 12 }} />}
+                            长卷
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -225,6 +270,18 @@ export function CommunityView() {
             )}
           </section>
         </>
+      )}
+      {/* 离屏诗画长卷：导出目标作品 */}
+      {scrollTarget && (
+        <div ref={scrollRef} style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }} aria-hidden>
+          <ScrollCard
+            title={`${scrollTarget.style}新作`}
+            subtitle={scrollTarget.isMine ? '诗画长卷 · 我的创作' : `诗友 ${scrollTarget.author} · 作品社区`}
+            poemLines={scrollTarget.content.split('\n')}
+            note={scrollTarget.excerpt}
+            footer={`${fmtTime(scrollTarget.createdAt)} · 墨韵诗心`}
+          />
+        </div>
       )}
       <Toast msg={msg} />
     </div>

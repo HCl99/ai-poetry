@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Download, Volume2, Square, Image as ImageIcon, Share2 } from 'lucide-react';
+import { Sparkles, Download, Volume2, Square, Image as ImageIcon, Share2, ScrollText } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 import { ShareCard, downloadSharePng } from './share-card';
+import { ScrollCard } from './scroll-card';
 
 const STYLES = [
   { key: 'libai', name: '李白体', hint: '浪漫飘逸 · 想象瑰奇' },
@@ -35,10 +36,12 @@ export function TransferView() {
   const [inkZoom, setInkZoom] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareNoInk, setShareNoInk] = useState(false);
+  const [scrollExporting, setScrollExporting] = useState(false);
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const startRef = useRef(0);
   const shareRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   /** 中断当前流式生成，已生成内容保留 */
   function stopGenerate() {
@@ -211,6 +214,33 @@ export function TransferView() {
     }
   }
 
+  /** 导出诗画长卷 PNG：意境图 + 竖排右起诗句 + 题签印章 */
+  async function exportScroll() {
+    if (!scrollRef.current || !poem || scrollExporting) return;
+    setScrollExporting(true);
+    const styleName = STYLES.find((s) => s.key === style)?.name || '古风';
+    try {
+      await downloadSharePng(scrollRef.current, `诗画长卷-${styleName}-${Date.now()}.png`);
+      show(shareNoInk ? '已导出诗画长卷（意境图跨域受限，未包含）' : '已导出诗画长卷');
+    } catch {
+      if (inkUrl && !shareNoInk) {
+        // 意境图跨域污染画布：降级为无图长卷重试一次
+        setShareNoInk(true);
+        await new Promise((r) => setTimeout(r, 100));
+        try {
+          await downloadSharePng(scrollRef.current, `诗画长卷-${styleName}-${Date.now()}.png`);
+          show('已导出诗画长卷（意境图跨域受限，未包含）');
+        } catch {
+          show('长卷导出失败，请重试');
+        }
+      } else {
+        show('长卷导出失败，请重试');
+      }
+    } finally {
+      setScrollExporting(false);
+    }
+  }
+
   const hasOutput = poem.length > 0;
 
   return (
@@ -373,6 +403,15 @@ export function TransferView() {
                     分享图
                   </button>
                   <button
+                    onClick={exportScroll}
+                    disabled={scrollExporting}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
+                    title="导出诗画长卷 PNG：竖排右起诗句 + 题签印章，可含意境图"
+                  >
+                    {scrollExporting ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <ScrollText className="h-3.5 w-3.5" />}
+                    诗画长卷
+                  </button>
+                  <button
                     onClick={exportMd}
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
                   >
@@ -436,6 +475,19 @@ export function TransferView() {
             title={`${STYLES.find((s) => s.key === style)?.name || '古风'} · 新作`}
             subtitle={`现代文 → 古风诗词 · ${meta?.form || '古诗词'}`}
             poemLines={poem.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 8)}
+            note={text.length > 90 ? `${text.slice(0, 90)}…` : text}
+            image={inkUrl && !shareNoInk ? inkUrl : undefined}
+            footer={`${meta?.model || 'glm-4-flash'} · ${new Date().toLocaleDateString('zh-CN')}`}
+          />
+        </div>
+      )}
+      {/* 离屏诗画长卷 */}
+      {doneInfo && poem && (
+        <div ref={scrollRef} style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }} aria-hidden>
+          <ScrollCard
+            title={`${STYLES.find((s) => s.key === style)?.name || '古风'}新作`}
+            subtitle="诗画长卷 · AI 风格迁移"
+            poemLines={poem.split('\n')}
             note={text.length > 90 ? `${text.slice(0, 90)}…` : text}
             image={inkUrl && !shareNoInk ? inkUrl : undefined}
             footer={`${meta?.model || 'glm-4-flash'} · ${new Date().toLocaleDateString('zh-CN')}`}

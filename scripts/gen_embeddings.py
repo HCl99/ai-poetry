@@ -97,10 +97,10 @@ def main():
         text = f"{name}：{bio or ''}"[:600].strip()
         return bid, None, text or (name or "佚名")
 
-    # 核心语料：有可考小传的诗人作品（17.1 万首），兼顾覆盖与质量
+    # 全量语料：LEFT JOIN 覆盖全部 34 万首（有无小传均向量化）；run() 幂等跳过已有向量
     run(conn, model, "poem",
         """SELECT p.id, p.title, p.author, p.paragraphs_simp FROM poems p
-           JOIN poet_bios b ON b.name = p.author""",
+           LEFT JOIN poet_bios b ON b.name = p.author""",
         build_poem)
     run(conn, model, "bio",
         "SELECT id, name, bio_simp FROM poet_bios",

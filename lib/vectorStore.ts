@@ -1,5 +1,6 @@
 // 内存向量库：从 chunks 表加载 poem 向量，余弦相似度 topK 检索
 // 向量化是离线脚本持续写入的，这里带 TTL 缓存定期刷新
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export interface VectorHit {
@@ -12,6 +13,7 @@ export interface VectorHit {
 
 interface Store {
   ids: string[];
+  idIdx: Map<string, number>; // refId -> 行号，用于按 id 取向量
   mat: Float32Array; // N×D 行主序，已 L2 归一化
   dims: number;
   meta: Map<string, { title: string; author: string; dynasty: string }>;
@@ -71,7 +73,9 @@ async function load(): Promise<Store> {
   const meta = new Map(poems.map((p) => [p.id, { title: p.title, author: p.author, dynasty: p.dynasty }]));
 
   console.log(`[vectorStore] loaded ${ids.length} vectors (${dims}d) in ${Date.now() - t0}ms`);
-  return { ids, mat, dims, meta, loadedAt: Date.now() };
+  const idIdx = new Map<string, number>();
+  ids.forEach((id, i) => idIdx.set(id, i));
+  return { ids, idIdx, mat, dims, meta, loadedAt: Date.now() };
 }
 
 async function getStore(): Promise<Store> {
@@ -161,4 +165,97 @@ export async function topKSimilar(
     hits.push({ id, ...m, score: Math.round(score * 1000) / 1000 });
   }
   return hits;
+}
+
+/** 从查询文本（《诗题》作者：正文…）提取诗题+作者的中文二元组，作为关键词信号 */
+function keywordBigrams(queryText: string): { grams: string[]; author: string } {
+  const title = queryText.match(/《([^》]{1,30})》/)?.[1] || '';
+  const afterTitle = queryText.slice(queryText.indexOf('》') + 1);
+  const author = afterTitle.split(/[：:]/)[0].replace(/[^一-鿿]/g, '');
+  const src = (title + author).replace(/[^一-鿿]/g, '');
+  const grams = new Set<string>();
+  for (let i = 0; i + 2 <= src.length; i++) grams.add(src.slice(i, i + 2));
+  if (author.length >= 2) grams.add(author);
+  return { grams: [...grams], author };
+}
+
+/** 关键词子串评分 0~1：诗题/作者命中查询二元组计数，同作者额外加权 */
+function keywordScore(m: { title: string; author: string }, grams: string[], author: string): number {
+  const hay = m.title + m.author;
+  let raw = 0;
+  for (const g of grams) if (hay.includes(g)) raw += 1;
+  if (author && m.author === author) raw += 2;
+  return Math.min(1, raw / 4);
+}
+
+/**
+ * 混合检索（向量 + 关键词）粗排：
+ * 解决人名/地名等专有名词纯向量匹配弱的问题——
+ * 向量候选扩量后与"诗题/作者含查询关键词"的库内直补候选做 0.7 向量 + 0.3 关键词加权融合。
+ * 返回的 score 为融合分（0~1），可直接作为粗排结果进 CrossEncoder 精排。
+ */
+export async function hybridCoarse(
+  queryText: string,
+  queryVec: number[],
+  k = 20,
+  opts: {
+    excludeId?: string;
+    filter?: (m: { title: string; author: string; dynasty: string }) => boolean;
+    vectorWeight?: number;
+  } = {},
+): Promise<VectorHit[]> {
+  const VW = opts.vectorWeight ?? 0.7;
+  const KW = 1 - VW;
+  const s = await getStore();
+  if (s.ids.length === 0 || queryVec.length !== s.dims) return [];
+
+  const { grams, author } = keywordBigrams(queryText);
+
+  // 1) 向量候选扩量
+  const vecCands = await topKSimilar(queryVec, Math.max(k * 3, 60), opts.excludeId, opts.filter);
+
+  // 2) 关键词直补：诗题/作者命中查询二元组、但向量排名可能靠后的库内诗篇（限制 24 条）
+  const clauses: Prisma.PoemWhereInput[] = grams.slice(0, 8).map((g) => ({ title: { contains: g } }));
+  if (author) clauses.push({ author: { equals: author } });
+  const kwRows = clauses.length
+    ? await prisma.poem.findMany({ where: { OR: clauses }, select: { id: true }, take: 24 })
+    : [];
+
+  // 归一化 query 向量，用于直补候选的余弦计算
+  let norm = 0;
+  for (const x of queryVec) norm += x * x;
+  norm = Math.sqrt(norm) || 1;
+  const q = new Float32Array(queryVec.length);
+  for (let i = 0; i < queryVec.length; i++) q[i] = queryVec[i] / norm;
+  const cosineAt = (idx: number) => {
+    let dot = 0;
+    const off = idx * s.dims;
+    for (let d = 0; d < s.dims; d++) dot += s.mat[off + d] * q[d];
+    return dot;
+  };
+
+  // 3) 加权融合
+  const fused = new Map<string, { hit: VectorHit; score: number }>();
+  for (const h of vecCands) {
+    const kw = keywordScore(h, grams, author);
+    fused.set(h.id, { hit: h, score: VW * Math.max(0, h.score) + KW * kw });
+  }
+  for (const row of kwRows) {
+    if (row.id === opts.excludeId || fused.has(row.id)) continue;
+    const idx = s.idIdx.get(row.id);
+    if (idx == null) continue; // 尚未向量化
+    const m = s.meta.get(row.id);
+    if (!m || (opts.filter && !opts.filter(m))) continue;
+    const kw = keywordScore(m, grams, author);
+    if (kw === 0) continue;
+    fused.set(row.id, {
+      hit: { id: row.id, ...m, score: 0 },
+      score: VW * Math.max(0, cosineAt(idx)) + KW * kw,
+    });
+  }
+
+  return [...fused.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k)
+    .map(({ hit, score }) => ({ ...hit, score: Math.round(score * 1000) / 1000 }));
 }

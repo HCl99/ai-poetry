@@ -1,7 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
-import { topKSimilar, vectorCorpusSize, type VectorHit } from '@/lib/vectorStore';
+import { hybridCoarse, vectorCorpusSize, type VectorHit } from '@/lib/vectorStore';
 import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
@@ -62,8 +62,11 @@ export async function POST(req: Request) {
         let rerankApplied = false;
 
         if (useVector) {
-          // 第一阶段：向量粗排 top20（更多候选供精排选用）
-          const coarse = await topKSimilar(queryVec!, 20, poemId, (m) => !(m.title === poem.title && m.author === poem.author));
+          // 第一阶段：混合检索粗排 top20（向量 0.7 + 关键词 0.3 融合，强化人名/地名专有名词召回）
+          const coarse = await hybridCoarse(queryText, queryVec!, 20, {
+            excludeId: poemId,
+            filter: (m) => !(m.title === poem.title && m.author === poem.author),
+          });
           if (coarse.length) {
             const bodies = await prisma.poem.findMany({
               where: { id: { in: coarse.map((h) => h.id) } },
@@ -117,7 +120,7 @@ export async function POST(req: Request) {
           }
         }
         send('step', {
-          label: useVector ? `RAG · ${rerankApplied ? '向量+精排' : '向量语义检索'}` : '意象共现检索',
+          label: useVector ? `RAG · ${rerankApplied ? '混合检索+精排' : '混合语义检索'}` : '意象共现检索',
           detail: related.length
             ? related.map((r) => {
                 if (rerankApplied) return `《${r.title}》 精排 ${r.rerankScore}`;

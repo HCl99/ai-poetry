@@ -158,6 +158,16 @@ model History {
   @@map("histories")
 }
 
+// 诗人互提关系（边权重 = 互提次数）
+model PoetRelation {
+  source  String  @map("source") @db.VarChar(64)
+  target  String  @map("target") @db.VarChar(64)
+  weight  Int     @default(1)
+
+  @@id([source, target])
+  @@map("poet_relations")
+}
+
 // 风格迁移创作
 model Creation {
   id         BigInt   @id @default(autoincrement())

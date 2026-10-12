@@ -61,6 +61,7 @@ export function AnnotateView() {
   const fullRef = useRef('');
   const [showSteps, setShowSteps] = useState(false);
   const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+  const [vertical, setVertical] = useState(false);
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -274,23 +275,52 @@ export function AnnotateView() {
             {selected && (
               <>
                 <div className="relative mt-5 rounded-lg p-6" style={{ background: '#F5F2EC' }}>
-                  <button
-                    onClick={() => speak('poem', `${selected.title}。${selected.dynasty}代，${selected.author}。${selected.first}`)}
-                    className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-white/70 hover:text-ink-deep"
-                    title="朗读原诗"
-                  >
-                    {speakingKey === 'poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                    {speakingKey === 'poem' ? '停止' : '朗读'}
-                  </button>
+                  <div className="absolute right-3 top-3 flex items-center gap-1">
+                    <button
+                      onClick={() => setVertical((v) => !v)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-white/70 hover:text-ink-deep"
+                      title={vertical ? '切换为横排' : '切换为竖排（古籍样式）'}
+                    >
+                      {vertical ? '横排' : '竖排'}
+                    </button>
+                    <button
+                      onClick={() => speak('poem', `${selected.title}。${selected.dynasty}代，${selected.author}。${selected.first}`)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-white/70 hover:text-ink-deep"
+                      title="朗读原诗"
+                    >
+                      {speakingKey === 'poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      {speakingKey === 'poem' ? '停止' : '朗读'}
+                    </button>
+                  </div>
                   <div className="text-center">
                     <span className={`dynasty-tag ${DYNASTY_CLASS[selected.dynasty] || 'dynasty-tang'}`}>{selected.dynasty}</span>
                     <h3 className="mt-2 font-brush text-2xl text-ink-deep">{selected.title}</h3>
                     <p className="mt-1 font-ui text-xs text-ink-soft">{selected.author}</p>
                   </div>
                   <div className="my-4 ink-divider" />
-                  <div className="text-center font-serif text-base leading-[2.5] text-ink-mid">
-                    {selected.first ? selected.first.split(/(?<=[，。？！；])/).filter(Boolean).map((l, i) => <p key={i}>{l}</p>) : <p>（无正文）</p>}
-                  </div>
+                  {vertical ? (
+                    <div className="relative">
+                      <div
+                        className="mx-auto overflow-x-auto py-1 font-serif text-base text-ink-mid"
+                        style={{ writingMode: 'vertical-rl', height: 300, letterSpacing: '0.3em' }}
+                      >
+                        {selected.first ? selected.first.split(/(?<=[，。？！；])/).filter(Boolean).map((l, i) => (
+                          <p key={i} style={{ marginLeft: i === 0 ? 0 : '1.2em', lineHeight: 1.9 }}>{l}</p>
+                        )) : <p>（无正文）</p>}
+                      </div>
+                      {/* 印章点缀 */}
+                      <span
+                        className="absolute bottom-1 left-1 flex h-9 w-9 flex-col items-center justify-center rounded font-brush text-[11px] leading-[1.1] text-white"
+                        style={{ background: '#A67C7C', boxShadow: '0 1px 4px rgba(166,124,124,0.4)' }}
+                      >
+                        <span>墨</span><span>韵</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-center font-serif text-base leading-[2.5] text-ink-mid">
+                      {selected.first ? selected.first.split(/(?<=[，。？！；])/).filter(Boolean).map((l, i) => <p key={i}>{l}</p>) : <p>（无正文）</p>}
+                    </div>
+                  )}
                 </div>
                 {selected.tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">

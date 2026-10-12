@@ -5,11 +5,14 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q')?.trim() || '';
+  const id = searchParams.get('id')?.trim() || '';
   const limit = Math.min(100, parseInt(searchParams.get('limit') || '30', 10));
 
-  const where = q
-    ? { OR: [{ title: { contains: q } }, { author: { contains: q } }] }
-    : { NOT: { tags: { equals: '[]' } } }; // 优先有标签的唐诗三百首
+  const where = id
+    ? { id }
+    : q
+      ? { OR: [{ title: { contains: q } }, { author: { contains: q } }] }
+      : { NOT: { tags: { equals: '[]' } } }; // 优先有标签的唐诗三百首
 
   const poems = await prisma.poem.findMany({
     where,

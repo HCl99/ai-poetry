@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { Sparkles, BookOpen, Edit, Star } from 'lucide-react';
+import { Sparkles, BookOpen, Edit, Star, Route, Flag } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,12 +14,21 @@ function greeting() {
   return '晚上好';
 }
 
+/** 每日一诗：按日期字符串散列，当日固定、隔日轮换 */
+function dayIndexOf(total: number): number {
+  const d = new Date();
+  const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % Math.max(total, 1);
+  return h;
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   const uid = session!.user.id!;
   const name = session!.user.name || '诗词探索者';
 
-  const [favCount, creationCount, annotateCount, histories, readPoems, recommend, imageryTop, agentLogs] =
+  const [favCount, creationCount, annotateCount, histories, readPoems, annotateDistinctList, dailyCount, imageryTop, agentLogs] =
     await Promise.all([
       prisma.favorite.count({ where: { userId: uid } }),
       prisma.creation.count({ where: { userId: uid } }),
@@ -30,18 +39,34 @@ export default async function DashboardPage() {
         distinct: ['targetId'],
         select: { targetId: true },
       }),
-      prisma.poem.findFirst({
-        where: { annotations: { isNot: null }, tags: { not: '[]' } },
-        select: { id: true, title: true, author: true, dynasty: true, paragraphsSimp: true },
-        skip: Math.floor(Math.random() * 300),
+      prisma.history.findMany({
+        where: { userId: uid, actionType: 'annotate', targetId: { not: null } },
+        distinct: ['targetId'],
+        select: { targetId: true },
       }),
+      prisma.poem.count({ where: { annotations: { isNot: null }, tags: { not: '[]' } } }),
       prisma.imagery.findMany({ orderBy: { count: 'desc' }, take: 6 }),
       prisma.annotationLog.findMany({ orderBy: { createdAt: 'desc' }, take: 4 }),
     ]);
 
-  const recommendLines = (recommend?.paragraphsSimp as string[] | null)?.slice(0, 2) || [];
+  // 每日一诗：当日全站固定；学习路径：推荐一首用户未读过的经典
+  const dailyPoem = dailyCount
+    ? await prisma.poem.findFirst({
+        where: { annotations: { isNot: null }, tags: { not: '[]' } },
+        select: { id: true, title: true, author: true, dynasty: true, paragraphsSimp: true },
+        skip: dayIndexOf(dailyCount),
+      })
+    : null;
+  const readIds = readPoems.map((r) => r.targetId!).filter(Boolean);
+  const nextPoem = await prisma.poem.findFirst({
+    where: { tags: { not: '[]' }, id: { notIn: readIds } },
+    select: { id: true, title: true, author: true, dynasty: true },
+  });
+
+  const dailyLines = (dailyPoem?.paragraphsSimp as string[] | null)?.slice(0, 2) || [];
   const recent = histories.slice(0, 4);
-  const readCount = readPoems.length;
+  const readCount = readIds.length;
+  const annotateDistinct = annotateDistinctList.length;
   const previewAnnotation = await prisma.poem.findFirst({
     where: { annotations: { isNot: null } },
     select: {
@@ -61,15 +86,15 @@ export default async function DashboardPage() {
             <p className="mt-2 font-ui text-sm" style={{ color: 'rgba(245,242,236,0.75)' }}>
               最近活动 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
             </p>
-            {recommend && (
+            {dailyPoem && (
               <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'rgba(245,242,236,0.12)' }}>
-                <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.3)', color: '#F5F2EC' }}>今日推荐</span>
+                <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.3)', color: '#F5F2EC' }}>每日一诗</span>
                 <div>
                   <p className="font-serif text-sm leading-relaxed text-paper-light">
-                    {recommendLines.join(' ')}
+                    {dailyLines.join(' ')}
                   </p>
                   <p className="mt-1 font-ui text-xs" style={{ color: 'rgba(245,242,236,0.6)' }}>
-                    〔{recommend.dynasty}〕{recommend.author}《{recommend.title}》
+                    〔{dailyPoem.dynasty}〕{dailyPoem.author}《{dailyPoem.title}》 · 按日期轮换，当日全站同一首
                   </p>
                 </div>
               </div>
@@ -98,6 +123,51 @@ export default async function DashboardPage() {
             <div className="mt-1.5 font-ui text-xs text-ink-soft">{s.label}</div>
           </div>
         ))}
+      </section>
+
+      {/* 学习路径：三阶段真实进度 + 下一首推荐 */}
+      <section className="paper-card p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-ui text-[15px] font-medium text-ink-deep">
+            <Route className="h-4 w-4 text-muted-blue" /> 我的学习路径
+          </h2>
+          <span className="font-ui text-xs text-ink-soft">进度来自你的真实学习数据</span>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[
+            { label: '启蒙诵读', desc: '浏览研习 10 首经典', done: Math.min(readCount, 10), total: 10, c: '#7B8EA1', href: '/workbench/explore' },
+            { label: 'AI 精读', desc: '完成 5 首 AI 深度注解', done: Math.min(annotateDistinct, 5), total: 5, c: '#6B8E7B', href: '/workbench/annotate' },
+            { label: '提笔创作', desc: '完成 3 首风格迁移创作', done: Math.min(creationCount, 3), total: 3, c: '#A67C7C', href: '/workbench/transfer' },
+          ].map((s, i) => {
+            const pct = Math.round((s.done / s.total) * 100);
+            const status = pct >= 100 ? '已达成' : s.done > 0 ? '进行中' : '待开始';
+            return (
+              <Link key={s.label} href={s.href} className="rounded-lg p-4 transition-ink hover:-translate-y-0.5" style={{ background: 'var(--inset)' }}>
+                <div className="flex items-center justify-between">
+                  <span className="font-ui text-sm font-medium" style={{ color: s.c }}>第{'一二三'[i]}步 · {s.label}</span>
+                  <span className="rounded-full px-2 py-0.5 font-ui text-[10px]" style={{ background: `${s.c}1f`, color: s.c }}>{status}</span>
+                </div>
+                <p className="mt-1.5 font-ui text-xs text-ink-soft">{s.desc}</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--paper-dark)' }}>
+                  <div className="h-full rounded-full transition-ink" style={{ width: `${pct}%`, background: s.c }} />
+                </div>
+                <p className="mt-2 font-ui text-xs text-ink-soft">{s.done} / {s.total}{pct >= 100 ? ' · 已达成' : ''}</p>
+              </Link>
+            );
+          })}
+        </div>
+        {nextPoem && (
+          <div className="mt-5 flex flex-col gap-3 rounded-lg p-4 md:flex-row md:items-center md:justify-between" style={{ border: '1px dashed var(--border-c)', background: 'var(--paper-dark)' }}>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="rounded-md px-2 py-1 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.2)', color: '#8B7355' }}>下一首推荐</span>
+              <span className="font-serif text-sm text-ink-deep">《{nextPoem.title}》</span>
+              <span className="font-ui text-xs text-ink-soft">〔{nextPoem.dynasty}〕{nextPoem.author} · 你还未读过</span>
+            </div>
+            <Link href={`/workbench/annotate?poem=${nextPoem.id}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 font-ui text-xs font-medium transition-ink hover:-translate-y-0.5" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
+              <Flag className="h-3.5 w-3.5" /> 开始学习
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* AI注解预览 + 最近浏览 */}

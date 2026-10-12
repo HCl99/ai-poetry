@@ -110,9 +110,20 @@ export function AnnotateView() {
   useEffect(() => {
     fetch('/api/poems/list?limit=50')
       .then((r) => r.json())
-      .then((list: PoemItem[]) => {
-        setPoems(list);
-        if (list.length) setSelected(list[0]);
+      .then(async (list: PoemItem[]) => {
+        let final = list;
+        // 支持学习路径「开始学习」跳转：/workbench/annotate?poem=<id> 直接定位
+        const pid = new URLSearchParams(window.location.search).get('poem');
+        if (pid && !final.some((p) => p.id === pid)) {
+          const r2 = await fetch(`/api/poems/list?id=${encodeURIComponent(pid)}`);
+          if (r2.ok) {
+            const byId: PoemItem | null = await r2.json();
+            if (byId) final = [byId, ...final];
+          }
+        }
+        setPoems(final);
+        const target = pid ? final.find((p) => p.id === pid) : null;
+        setSelected(target || final[0] || null);
       })
       .catch(() => setError('诗词列表加载失败'));
     // 卸载时终止语音识别

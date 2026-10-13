@@ -30,7 +30,7 @@ export function AuthSplit({ totalPoems, children }: { totalPoems: number; childr
           ))}
         </div>
 
-        {/* 打字机标语：三句轮播 + 闪烁光标 */}
+        {/* 整句墨韵浮现标语：三句轮播（v2.3 替代逐字打字） */}
         <div className="mt-6 flex h-8 items-center">
           <Typewriter
             className="font-serif text-base text-sepia min-[900px]:text-lg"

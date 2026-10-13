@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ProfileModal } from './profile-modal';
+import { InkAmbience } from './ink-ambience';
 
 const NAV = [
   { key: 'dashboard', label: '工作台', href: '/workbench', icon: 'home' },
@@ -77,6 +78,8 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
 
   return (
     <div className="min-h-screen" data-theme={dark ? 'dark' : undefined} style={dark ? { background: '#1D1B18' } : undefined}>
+      {/* 水墨氛围背景：墨晕呼吸 + 墨滴扩散 + 明月轻浮（-z 层，不遮挡内容） */}
+      <InkAmbience />
       {/* 顶部栏 */}
       <header className="glass-strong fixed inset-x-0 top-0 z-40 h-16 border-b border-light">
         <div className="flex h-full items-center gap-4 px-4 md:px-6">

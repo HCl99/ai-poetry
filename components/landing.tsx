@@ -190,7 +190,7 @@ export function Landing({ isLoggedIn, userName, totalPoems = 57611 }: { isLogged
           <p className="anim-fade-up mt-3 font-ui text-lg tracking-[0.35em] text-ink-mid md:text-xl" style={{ animationDelay: '0.2s' }}>
             AI 古诗词文化探索平台
           </p>
-          {/* 打字机标语：逐句轮播（v2.2 动态化） */}
+          {/* 整句墨韵浮现标语：逐句轮播（v2.3 替代逐字打字） */}
           <div className="anim-fade-up mt-4 flex h-8 items-center justify-center" style={{ animationDelay: '0.25s' }}>
             <Typewriter
               className="font-serif text-base text-sepia md:text-lg"

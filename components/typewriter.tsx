@@ -3,51 +3,43 @@
 import { useEffect, useState } from 'react';
 
 /**
- * 打字机标语：逐字打出 → 停留 → 逐字删除 → 下一句循环。
- * loop=false 时打完即停（光标持续闪烁），适用于登录后首页的单句标语。
- * aria-label 固定为完整文案，避免读屏器读到打字中间态。
+ * 整句标语轮播：不再逐字打出，整句以「墨韵浮现」特效一次性显现
+ * （淡入 + 上浮 + 由虚化到清晰），停留后淡出切下一句。
+ * 单句时浮现一次即常驻。aria-label 固定为完整文案，读屏器不受动画影响。
  */
 export function Typewriter({
   lines,
   className,
-  speed = 170,
-  holdMs = 2600,
-  loop = true,
+  holdMs = 3200,
 }: {
   lines: string[];
   className?: string;
-  speed?: number;
   holdMs?: number;
-  loop?: boolean;
 }) {
-  const [text, setText] = useState('');
   const [idx, setIdx] = useState(0);
-  const [deleting, setDeleting] = useState(false);
+  const [phase, setPhase] = useState<'in' | 'hold' | 'out'>('in');
+  const single = lines.length <= 1;
 
   useEffect(() => {
-    const cur = lines[idx % lines.length];
-    // 单句且打完：停止，仅保留光标闪烁
-    if (!loop && !deleting && text === cur) return;
-    if (!deleting && text === cur) {
-      const t = setTimeout(() => setDeleting(true), holdMs);
-      return () => clearTimeout(t);
-    }
-    if (deleting && text === '') {
-      setDeleting(false);
-      setIdx((i) => (i + 1) % lines.length);
-      return;
-    }
-    const t = setTimeout(
-      () => setText(deleting ? cur.slice(0, text.length - 1) : cur.slice(0, text.length + 1)),
-      deleting ? Math.max(40, speed / 2.5) : speed,
-    );
+    if (single) return;
+    let t: ReturnType<typeof setTimeout>;
+    if (phase === 'in') t = setTimeout(() => setPhase('hold'), 750);
+    else if (phase === 'hold') t = setTimeout(() => setPhase('out'), holdMs);
+    else t = setTimeout(() => { setIdx((i) => (i + 1) % lines.length); setPhase('in'); }, 380);
     return () => clearTimeout(t);
-  }, [text, deleting, idx, lines, speed, holdMs, loop]);
+  }, [phase, holdMs, single, lines.length]);
 
+  const cur = lines[idx % lines.length];
   return (
     <span className={className} aria-label={lines[0]}>
-      <span aria-hidden="true">{text}</span>
-      <span className="type-caret" aria-hidden="true" />
+      <span
+        key={idx}
+        aria-hidden="true"
+        className={phase === 'out' ? 'anim-ink-veil' : 'anim-ink-reveal'}
+        style={{ display: 'inline-block' }}
+      >
+        {cur}
+      </span>
     </span>
   );
 }

@@ -98,8 +98,8 @@ export default async function DashboardPage() {
         </div>
       </HeroCarousel>
 
-      {/* 统计卡片 */}
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* 统计卡片（进场递增浮现） */}
+      <section className="anim-fade-up grid grid-cols-2 gap-4 lg:grid-cols-4" style={{ animationDelay: '0.08s' }}>
         {[
           { icon: <BookOpen className="h-5 w-5" />, label: '研习诗词', value: `${readCount}`, trend: readCount ? '注解 · 收藏' : '开始探索', c: '#7B8EA1' },
           { icon: <Sparkles className="h-5 w-5" />, label: 'AI注解', value: `${annotateCount}`, trend: annotateCount ? '持续生成中' : '开始体验', c: '#6B8E7B' },
@@ -118,7 +118,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* 学习路径：三阶段真实进度 + 下一首推荐 */}
-      <section className="paper-card p-6">
+      <section className="anim-fade-up paper-card p-6" style={{ animationDelay: '0.16s' }}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-ui text-[15px] font-medium text-ink-deep">
             <Route className="h-4 w-4 text-muted-blue" /> 我的学习路径
@@ -163,7 +163,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* AI注解预览 + 最近浏览 */}
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section className="anim-fade-up grid grid-cols-1 gap-6 lg:grid-cols-2" style={{ animationDelay: '0.24s' }}>
         {previewAnnotation && (
           <div className="paper-card p-6">
             <div className="mb-4 flex items-center justify-between">
@@ -217,7 +217,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* 意象快捷入口 + 注解记录 */}
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section className="anim-fade-up grid grid-cols-1 gap-6 lg:grid-cols-2" style={{ animationDelay: '0.32s' }}>
         <div className="paper-card p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-ui text-[15px] font-medium text-ink-deep">意象快捷入口</h2>

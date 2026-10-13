@@ -309,6 +309,18 @@ html.motion-off .anim-float { animation: none; }
 .anim-ink-drift { animation: inkDrift 16s ease-in-out infinite alternate; }
 .anim-ink-breathe { animation: inkBreathe 11s ease-in-out infinite; }
 .anim-ink-spread { animation: inkSpread 7.5s ease-out infinite; }
+
+/* 整句墨韵浮现标语：淡入 + 上浮 + 由虚化到清晰（替代逐字打字机） */
+@keyframes inkReveal {
+  0% { opacity: 0; transform: translateY(10px); filter: blur(8px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes inkVeil {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); filter: blur(4px); }
+}
+.anim-ink-reveal { animation: inkReveal 0.75s ease-out both; }
+.anim-ink-veil { animation: inkVeil 0.38s ease-in both; }
 .type-caret {
   display: inline-block;
   width: 2px;
@@ -325,6 +337,8 @@ html.motion-off .anim-float { animation: none; }
   .anim-ink-drift,
   .anim-ink-breathe,
   .anim-ink-spread,
+  .anim-ink-reveal,
+  .anim-ink-veil,
   .type-caret { animation: none; }
 }
 /* 无障碍：设置中手动关闭动效（localStorage 持久化，与系统偏好等效） */
@@ -332,4 +346,6 @@ html.motion-off .anim-ink-float,
 html.motion-off .anim-ink-drift,
 html.motion-off .anim-ink-breathe,
 html.motion-off .anim-ink-spread,
+html.motion-off .anim-ink-reveal,
+html.motion-off .anim-ink-veil,
 html.motion-off .type-caret { animation: none; }

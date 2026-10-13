@@ -128,9 +128,67 @@ model User {
   email        String   @unique @db.VarChar(255)
   name         String?  @db.VarChar(64)
   passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         String   @default("user") @db.VarChar(16)
+  status       String   @default("active") @db.VarChar(16)
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("users")
+}
+
+// 学习社区帖子
+model Post {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Char(36)
+  title      String   @db.VarChar(255)
+  content    String   @db.Text
+  category   String   @db.VarChar(16)
+  status     String   @default("approved") @db.VarChar(16)
+  flagReason String?  @map("flag_reason") @db.VarChar(255)
+  reviewNote String?  @map("review_note") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt], map: "idx_posts_status")
+  @@index([userId], map: "idx_posts_user")
+  @@map("posts")
+}
+
+// 帖子评论（parentId 支持楼中楼回复）
+model Comment {
+  id        BigInt   @id @default(autoincrement())
+  postId    BigInt   @map("post_id")
+  userId    String   @map("user_id") @db.Char(36)
+  parentId  BigInt?  @map("parent_id")
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([postId], map: "idx_comments_post")
+  @@map("comments")
+}
+
+// 帖子点赞
+model PostLike {
+  id        BigInt   @id @default(autoincrement())
+  postId    BigInt   @map("post_id")
+  userId    String   @map("user_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([postId, userId], map: "uk_post_like")
+  @@map("post_likes")
+}
+
+// 意见反馈
+model Feedback {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Char(36)
+  type      String   @db.VarChar(16)
+  content   String   @db.Text
+  contact   String?  @db.VarChar(64)
+  reply     String?  @db.Text
+  status    String   @default("open") @db.VarChar(16)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt], map: "idx_feedback_status")
+  @@map("feedbacks")
 }
 
 // 收藏

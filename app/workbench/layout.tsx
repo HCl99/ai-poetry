@@ -8,7 +8,7 @@ export default async function WorkbenchLayout({ children }: { children: React.Re
   const session = await auth();
   if (!session?.user) redirect('/login');
   return (
-    <WorkbenchShell user={{ id: session.user.id!, name: session.user.name, email: session.user.email }}>
+    <WorkbenchShell user={{ id: session.user.id!, name: session.user.name, email: session.user.email, role: session.user.role }}>
       {children}
     </WorkbenchShell>
   );

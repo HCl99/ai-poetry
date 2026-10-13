@@ -41,11 +41,12 @@ function NavIcon({ name }: { name: string }) {
     case 'flask': return <svg {...common}><path d="M9 3h6" /><path d="M10 3v6L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9V3" /><path d="M7.5 14h9" /></svg>;
     case 'timeline': return <svg {...common}><path d="M3 3v18h18" /><path d="m6 15 4-5 3 3 5-7" /><circle cx="6" cy="15" r="1.2" /><circle cx="10" cy="10" r="1.2" /><circle cx="13" cy="13" r="1.2" /><circle cx="18" cy="6" r="1.2" /></svg>;
     case 'plug': return <svg {...common}><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z" /></svg>;
+    case 'shield': return <svg {...common}><path d="M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z" /><path d="m9 11.5 2 2 4-4.5" /></svg>;
     default: return null;
   }
 }
 
-export function WorkbenchShell({ user, children }: { user: { id: string; name?: string | null; email?: string | null }; children: React.ReactNode }) {
+export function WorkbenchShell({ user, children }: { user: { id: string; name?: string | null; email?: string | null; role?: string }; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -137,6 +138,19 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
               </Link>
             );
           })}
+          {user.role === 'admin' && (
+            <>
+              <div className="mb-2 mt-3 px-3 font-ui text-xs text-ink-soft">管理</div>
+              <Link
+                href="/admin"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 font-ui text-sm transition-ink"
+                style={pathname.startsWith('/admin') ? { background: 'var(--btn-bg)', color: 'var(--btn-text)' } : { color: 'var(--ink-mid)' }}
+              >
+                <NavIcon name="shield" />
+                管理后台
+              </Link>
+            </>
+          )}
         </nav>
         <div className="mt-auto border-t border-light p-4">
           <button onClick={() => setProfileOpen(true)} className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition-ink hover:bg-paper-dark">

@@ -23,6 +23,9 @@ export async function authenticate(formData: FormData): Promise<string> {
     if (error instanceof AuthError) {
       return '邮箱或密码错误，请重试';
     }
+    if (error instanceof Error && error.message === 'ACCOUNT_DISABLED') {
+      return '该账号已被禁用，请联系管理员';
+    }
     throw error;
   }
 }

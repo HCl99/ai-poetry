@@ -5,6 +5,7 @@ import { Heart, Send, Undo2, Users, Loader2, ScrollText } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { ScrollCard } from './scroll-card';
 import { downloadSharePng } from './share-card';
+import { StudySquare } from './study-square';
 
 interface CreationItem {
   id: string;
@@ -32,6 +33,7 @@ function fmtTime(iso: string): string {
 }
 
 export function CommunityView() {
+  const [tab, setTab] = useState<'works' | 'study'>('works');
   const [mine, setMine] = useState<CreationItem[]>([]);
   const [feed, setFeed] = useState<CreationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,13 +140,34 @@ export function CommunityView() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-brush text-3xl text-ink-black">作品社区</h1>
+        <h1 className="font-brush text-3xl text-ink-black">社区</h1>
         <p className="mt-1.5 font-ui text-sm text-ink-soft">
-          把风格迁移的创作发布到分享广场，与诗友互相品读、点赞交流
+          作品广场互相品读点赞 · 学习社区发帖交流，敏感内容自动进入人工审核
         </p>
       </div>
 
-      {loading ? (
+      {/* Tab：作品社区 / 学习社区 */}
+      <div className="flex gap-2">
+        {([
+          { key: 'works', label: '作品社区' },
+          { key: 'study', label: '学习社区' },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className="rounded-full border-[1.5px] px-4 py-1.5 font-ui text-sm transition-ink"
+            style={tab === t.key
+              ? { background: 'var(--btn-bg)', color: 'var(--btn-text)', borderColor: 'var(--btn-bg)' }
+              : { borderColor: 'var(--border-c)', color: 'var(--ink-mid)' }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'study' ? (
+        <StudySquare />
+      ) : loading ? (
         <div className="flex items-center justify-center py-20 font-ui text-sm text-ink-soft">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在加载社区…
         </div>

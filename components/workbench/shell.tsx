@@ -10,6 +10,7 @@ const NAV = [
   { key: 'explore', label: '诗词探索', href: '/workbench/explore', icon: 'book' },
   { key: 'assistant', label: 'AI 助手', href: '/workbench/assistant', icon: 'bot', badge: 'AI' },
   { key: 'recite', label: '背诵闯关', href: '/workbench/recite', icon: 'grad' },
+  { key: 'quiz', label: '诗词测验', href: '/workbench/quiz', icon: 'clipboard' },
   { key: 'annotate', label: 'AI智能注解', href: '/workbench/annotate', icon: 'sparkles', badge: 'AI' },
   { key: 'transfer', label: '风格迁移', href: '/workbench/transfer', icon: 'edit', badge: 'AI' },
   { key: 'feihua', label: '飞花令', href: '/workbench/feihua', icon: 'quote', badge: 'AI' },
@@ -44,6 +45,7 @@ function NavIcon({ name }: { name: string }) {
     case 'plug': return <svg {...common}><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z" /></svg>;
     case 'shield': return <svg {...common}><path d="M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z" /><path d="m9 11.5 2 2 4-4.5" /></svg>;
     case 'bot': return <svg {...common}><rect x="4" y="8" width="16" height="12" rx="2" /><path d="M12 8V4M8 4h8" /><circle cx="9" cy="14" r="1" fill="currentColor" /><circle cx="15" cy="14" r="1" fill="currentColor" /></svg>;
+    case 'clipboard': return <svg {...common}><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="m9 13 2 2 4-4.5" /></svg>;
     default: return null;
   }
 }

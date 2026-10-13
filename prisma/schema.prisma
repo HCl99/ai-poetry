@@ -270,3 +270,22 @@ model Note {
   @@index([userId, createdAt], map: "idx_note_user")
   @@map("notes")
 }
+
+// 测验记录（选择/填空/鉴赏）
+model QuizRecord {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Char(36)
+  quizType   String   @map("quiz_type") @db.VarChar(16)
+  difficulty String   @db.VarChar(8)
+  poemId     String?  @map("poem_id") @db.Char(36)
+  question   String   @db.VarChar(500)
+  options    Json?
+  answer     String   @db.VarChar(500)
+  userAnswer String?  @map("user_answer") @db.VarChar(500)
+  score      Int?
+  feedback   String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_quiz_user")
+  @@map("quiz_records")
+}

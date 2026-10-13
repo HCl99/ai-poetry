@@ -130,6 +130,7 @@ model User {
   passwordHash String   @map("password_hash") @db.VarChar(255)
   role         String   @default("user") @db.VarChar(16)
   status       String   @default("active") @db.VarChar(16)
+  avatar       String?  @db.Text
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("users")

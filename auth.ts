@@ -42,12 +42,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
       }
-      // RBAC：登录时刻快照角色；admin 授权变更后重新登录生效
+      // RBAC + 个人资料：登录时刻快照，后续每次请求实时刷新（改名/改头像即时生效）
       if (token.id) {
-        const row = await prisma.user.findUnique({ where: { id: token.id as string }, select: { role: true, status: true } });
+        const row = await prisma.user.findUnique({ where: { id: token.id as string }, select: { role: true, status: true, avatar: true, name: true } });
         if (row) {
           token.role = row.role;
           token.status = row.status;
+          token.avatar = row.avatar;
+          if (row.name) token.name = row.name;
         }
       }
       return token;
@@ -56,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.role = (token.role as string) || 'user';
+        session.user.avatar = (token.avatar as string | null) || null;
         // 已禁用用户的会话立即失效
         if ((token.status as string) === 'disabled') session.user.role = 'disabled';
       }

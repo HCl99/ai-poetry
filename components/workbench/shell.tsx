@@ -50,7 +50,7 @@ function NavIcon({ name }: { name: string }) {
   }
 }
 
-export function WorkbenchShell({ user, children }: { user: { id: string; name?: string | null; email?: string | null; role?: string }; children: React.ReactNode }) {
+export function WorkbenchShell({ user, children }: { user: { id: string; name?: string | null; email?: string | null; role?: string; avatar?: string | null }; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -158,10 +158,14 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
         </nav>
         <div className="mt-auto border-t border-light p-4">
           <button onClick={() => setProfileOpen(true)} className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition-ink hover:bg-paper-dark">
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-full font-brush text-sm text-white" style={{ background: 'var(--brand-grad)' }}>
-              {(user.name || user.email || '客')[0]}
-              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
-            </span>
+            {user.avatar ? (
+              <img src={user.avatar} alt="头像" className="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              <span className="relative flex h-9 w-9 items-center justify-center rounded-full font-brush text-sm text-white" style={{ background: 'var(--brand-grad)' }}>
+                {(user.name || user.email || '客')[0]}
+                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
+              </span>
+            )}
             <span className="min-w-0 flex-1">
               <span className="block truncate font-ui text-sm text-ink-deep">{user.name || '诗词探索者'}</span>
               <span className="block truncate font-ui text-xs text-ink-soft">{user.email}</span>
@@ -179,7 +183,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
       <ProfileModal
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
-        user={{ name: user.name || '诗词探索者', email: user.email || '' }}
+        user={{ name: user.name || '诗词探索者', email: user.email || '', avatar: user.avatar }}
         onLogout={handleLogout}
       />
     </div>

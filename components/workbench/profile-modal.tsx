@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useToast, Toast } from '@/components/toast';
+import { FEEDBACK_TYPES } from '@/lib/community';
 
 type Sub = 'main' | 'favorites' | 'history' | 'creations' | 'notes' | 'settings' | 'help' | 'logout';
 
@@ -33,10 +35,34 @@ function Icon({ name }: { name: string }) {
 interface Counts { favorites: number; history: number; creations: number; notes: number }
 const EMPTY_COUNTS: Counts = { favorites: 0, history: 0, creations: 0, notes: 0 };
 
+/** 头像压缩：居中裁剪为 128×128，输出 JPEG DataURL（约 5-15KB） */
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { URL.revokeObjectURL(url); reject(new Error('图片处理失败')); return; }
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片读取失败')); };
+    img.src = url;
+  });
+}
+
 export function ProfileModal({ open, onClose, user, onLogout }: {
   open: boolean;
   onClose: () => void;
-  user: { name: string; email: string };
+  user: { name: string; email: string; avatar?: string | null };
   onLogout: () => void | Promise<void>;
 }) {
   const [sub, setSub] = useState<Sub>('main');
@@ -46,6 +72,24 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
   const [creations, setCreations] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const { msg, show } = useToast();
+  const router = useRouter();
+
+  /* ---- 设置页状态 ---- */
+  const [avatar, setAvatar] = useState<string | null>(user.avatar || null);
+  const [name, setName] = useState(user.name);
+  const [savingName, setSavingName] = useState(false);
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [savingPwd, setSavingPwd] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /* ---- 反馈页状态 ---- */
+  const [fbType, setFbType] = useState('');
+  const [fbContent, setFbContent] = useState('');
+  const [fbContact, setFbContact] = useState('');
+  const [fbSending, setFbSending] = useState(false);
+  const [fbItems, setFbItems] = useState<any[] | null>(null);
 
   const loadCounts = useCallback(async () => {
     try {
@@ -55,8 +99,105 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
   }, []);
 
   useEffect(() => {
-    if (open) { setSub('main'); loadCounts(); }
-  }, [open, loadCounts]);
+    if (open) {
+      setSub('main');
+      loadCounts();
+      setAvatar(user.avatar || null);
+      setName(user.name);
+      setOldPwd(''); setNewPwd(''); setConfirmPwd('');
+      setFbType(''); setFbContent(''); setFbContact(''); setFbItems(null);
+    }
+  }, [open, loadCounts, user.avatar, user.name]);
+
+  /* ---- 设置页：头像压缩上传（128×128 JPEG DataURL） ---- */
+  function pickAvatar() { fileRef.current?.click(); }
+
+  async function handleAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) { show('仅支持 PNG / JPG / WebP 图片'); return; }
+    try {
+      const dataUrl = await compressImage(file);
+      const r = await fetch('/api/user/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar: dataUrl }) });
+      const d = await r.json();
+      if (!r.ok) { show(d.error || '上传失败'); return; }
+      setAvatar(dataUrl);
+      show('头像已更新');
+      router.refresh();
+    } catch (err: any) {
+      show(err?.message || '图片处理失败');
+    }
+  }
+
+  async function removeAvatar() {
+    const r = await fetch('/api/user/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar: null }) });
+    if (r.ok) { setAvatar(null); show('已恢复默认头像'); router.refresh(); }
+  }
+
+  /* ---- 设置页：昵称保存 ---- */
+  async function saveName(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name?.trim();
+    if (!trimmed || trimmed.length < 1 || trimmed.length > 20) { show('昵称需为 1-20 个字符'); return; }
+    setSavingName(true);
+    try {
+      const r = await fetch('/api/user/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: trimmed }) });
+      const d = await r.json();
+      if (!r.ok) { show(d.error || '保存失败'); return; }
+      show('昵称已保存');
+      router.refresh();
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  /* ---- 设置页：修改密码 ---- */
+  const pwdMismatch = confirmPwd.length > 0 && newPwd !== confirmPwd;
+  const pwdInvalid = newPwd.length > 0 && (newPwd.length < 6 || newPwd.length > 32);
+
+  async function changePwd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!oldPwd) { show('请输入旧密码'); return; }
+    if (pwdInvalid) { show('新密码长度需为 6-32 位'); return; }
+    if (newPwd !== confirmPwd) { show('两次输入的新密码不一致'); return; }
+    setSavingPwd(true);
+    try {
+      const r = await fetch('/api/user/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }) });
+      const d = await r.json();
+      if (!r.ok) { show(d.error || '修改失败'); return; }
+      show('密码修改成功');
+      setOldPwd(''); setNewPwd(''); setConfirmPwd('');
+    } finally {
+      setSavingPwd(false);
+    }
+  }
+
+  /* ---- 反馈页 ---- */
+  async function loadFeedback() {
+    try {
+      const r = await fetch('/api/feedback');
+      if (r.ok) setFbItems((await r.json()).items);
+    } catch { /* ignore */ }
+  }
+
+  async function submitFeedback(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fbType) { show('请选择反馈类型'); return; }
+    const text = fbContent.trim();
+    if (text.length < 5 || text.length > 500) { show('反馈内容需为 5-500 字'); return; }
+    setFbSending(true);
+    try {
+      const r = await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: fbType, content: text, contact: fbContact.trim() || undefined }) });
+      const d = await r.json();
+      if (!r.ok) { show(d.error || '提交失败'); return; }
+      show('反馈已提交，感谢你的建议！');
+      setFbType(''); setFbContent(''); setFbContact('');
+      loadFeedback();
+    } finally {
+      setFbSending(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +205,8 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
     if (sub === 'history' && !history.length) fetch('/api/user/history').then((r) => r.ok ? r.json() : []).then(setHistory).catch(() => {});
     if (sub === 'creations' && !creations.length) fetch('/api/user/creations').then((r) => r.ok ? r.json() : []).then(setCreations).catch(() => {});
     if (sub === 'notes' && !notes.length) fetch('/api/user/notes').then((r) => r.ok ? r.json() : []).then(setNotes).catch(() => {});
-  }, [sub, open, favorites.length, history.length, creations.length, notes.length]);
+    if (sub === 'help' && fbItems === null) loadFeedback();
+  }, [sub, open, favorites.length, history.length, creations.length, notes.length, fbItems]);
 
   if (!open) return null;
 
@@ -92,10 +234,14 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
           {sub === 'main' && (
             <>
               <div className="flex items-center gap-3 border-b border-light px-6 py-5">
-                <span className="relative flex h-11 w-11 items-center justify-center rounded-full font-brush text-lg text-white" style={{ background: 'var(--brand-grad)' }}>
-                  {user.name[0]}
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
-                </span>
+                {avatar ? (
+                  <img src={avatar} alt="头像" className="h-11 w-11 rounded-full object-cover" />
+                ) : (
+                  <span className="relative flex h-11 w-11 items-center justify-center rounded-full font-brush text-lg text-white" style={{ background: 'var(--brand-grad)' }}>
+                    {user.name[0]}
+                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
+                  </span>
+                )}
                 <div>
                   <div className="font-ui text-[15px] font-medium text-ink-deep">{user.name}</div>
                   <div className="font-ui text-xs text-ink-soft">{user.email}</div>
@@ -186,39 +332,181 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
             </div>
           )}
 
-          {/* 设置 */}
+          {/* 设置：头像 / 昵称 / 修改密码 */}
           {sub === 'settings' && (
-            <form className="space-y-4 p-5 font-ui" onSubmit={(e) => { e.preventDefault(); show('设置已保存'); setTimeout(onClose, 800); }}>
-              {[
-                { label: '昵称', value: user.name },
-                { label: '邮箱', value: user.email },
-                { label: '偏好朝代', value: '唐' },
-                { label: 'AI注解详细程度', value: '标准' },
-              ].map((f) => (
-                <div key={f.label}>
-                  <label className="mb-1.5 block text-sm text-ink-mid">{f.label}</label>
-                  <input defaultValue={f.value} className="h-10 w-full rounded-lg border-[1.5px] border-c bg-white/60 px-3 text-sm outline-none transition-ink focus:border-ink-deep" />
+            <div className="space-y-6 p-5 font-ui">
+              {/* 头像 */}
+              <section>
+                <h4 className="mb-2 text-sm font-medium text-ink-deep">头像</h4>
+                <div className="flex items-center gap-4">
+                  {avatar ? (
+                    <img src={avatar} alt="头像" className="h-16 w-16 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-16 w-16 items-center justify-center rounded-full font-brush text-xl text-white" style={{ background: 'var(--brand-grad)' }}>
+                      {user.name[0]}
+                    </span>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <button onClick={pickAvatar} className="rounded-lg border-[1.5px] border-c px-3 py-1.5 text-xs text-ink-mid transition-ink hover:bg-paper-dark">上传新头像</button>
+                      {avatar && (
+                        <button onClick={removeAvatar} className="rounded-lg px-3 py-1.5 text-xs transition-ink" style={{ background: 'rgba(166,124,124,0.1)', color: '#A67C7C' }}>恢复默认</button>
+                      )}
+                    </div>
+                    <span className="text-xs text-ink-soft">支持 JPG / PNG / WebP，自动裁剪为圆形 128×128</span>
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleAvatarFile} />
                 </div>
-              ))}
-              <button type="submit" className="h-10 w-full rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>保存设置</button>
-            </form>
+              </section>
+
+              {/* 昵称 */}
+              <section>
+                <h4 className="mb-2 text-sm font-medium text-ink-deep">昵称</h4>
+                <form className="flex gap-2" onSubmit={saveName}>
+                  <input
+                    value={name || ''}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={20}
+                    placeholder="给自己起个雅号吧"
+                    className="h-10 flex-1 rounded-lg border-[1.5px] border-c bg-white/60 px-3 text-sm outline-none transition-ink focus:border-ink-deep"
+                  />
+                  <button type="submit" disabled={savingName} className="h-10 rounded-lg px-4 text-sm font-medium transition-ink hover:-translate-y-0.5 disabled:opacity-50" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
+                    {savingName ? '保存中…' : '保存'}
+                  </button>
+                </form>
+                <p className="mt-1.5 text-xs text-ink-soft">邮箱 {user.email} 不可更改</p>
+              </section>
+
+              {/* 修改密码 */}
+              <section>
+                <h4 className="mb-2 text-sm font-medium text-ink-deep">修改密码</h4>
+                <form className="space-y-3" onSubmit={changePwd}>
+                  <input
+                    type="password"
+                    value={oldPwd}
+                    onChange={(e) => setOldPwd(e.target.value)}
+                    placeholder="当前密码"
+                    autoComplete="current-password"
+                    className="h-10 w-full rounded-lg border-[1.5px] border-c bg-white/60 px-3 text-sm outline-none transition-ink focus:border-ink-deep"
+                  />
+                  <div>
+                    <input
+                      type="password"
+                      value={newPwd}
+                      onChange={(e) => setNewPwd(e.target.value)}
+                      placeholder="新密码（6-32 位）"
+                      autoComplete="new-password"
+                      className={`h-10 w-full rounded-lg border-[1.5px] bg-white/60 px-3 text-sm outline-none transition-ink ${pwdInvalid ? 'border-[#A67C7C]' : 'border-c focus:border-ink-deep'}`}
+                    />
+                    {pwdInvalid && <p className="mt-1 text-xs" style={{ color: '#A67C7C' }}>新密码长度需为 6-32 位</p>}
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      value={confirmPwd}
+                      onChange={(e) => setConfirmPwd(e.target.value)}
+                      placeholder="确认新密码"
+                      autoComplete="new-password"
+                      className={`h-10 w-full rounded-lg border-[1.5px] bg-white/60 px-3 text-sm outline-none transition-ink ${pwdMismatch ? 'border-[#A67C7C]' : 'border-c focus:border-ink-deep'}`}
+                    />
+                    {pwdMismatch && <p className="mt-1 text-xs" style={{ color: '#A67C7C' }}>两次输入的密码不一致</p>}
+                  </div>
+                  <button type="submit" disabled={savingPwd || pwdInvalid || pwdMismatch || !oldPwd || !newPwd} className="h-10 w-full rounded-lg text-sm font-medium transition-ink hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
+                    {savingPwd ? '提交中…' : '确认修改'}
+                  </button>
+                </form>
+              </section>
+            </div>
           )}
 
-          {/* 帮助 */}
+          {/* 帮助与反馈 */}
           {sub === 'help' && (
-            <div className="space-y-2 p-5">
-              {[
-                { q: 'AI注解是如何生成的？', a: '先以本地 BGE 中文向量模型将诗词编码为 512 维语义向量，在 16.7 万首诗的向量库中检索最相似的诗篇，连同诗人小传作为上下文，再由大模型生成字词释义、典故溯源、情感分析、格律分析四维度注解，每条均标注引用出处与相似度。' },
-                { q: '风格迁移支持哪些诗人风格？', a: '目前支持李白体、苏轼体、婉约体、王维体、杜甫体五种风格，AI 会先向量检索该诗人的语义相近原作作为范例，再模仿其风格生成诗词。' },
-                { q: '诗词数据来源是什么？', a: '基于GitHub开源项目chinese-poetry，收录约34万首唐宋诗词，公有领域零版权风险。' },
-                { q: '如何收藏诗词？', a: '在诗词探索或注解页面点击收藏按钮，即可在「我的收藏」中查看。' },
-                { q: '遇到内容问题怎么办？', a: 'AI 生成内容仅供参考，如发现注解有误或内容不当，可重新生成或通过邮箱联系我们。' },
-              ].map((f, i) => (
-                <details key={i} className="rounded-lg px-4 py-3" style={{ background: 'var(--inset)' }}>
-                  <summary className="cursor-pointer font-ui text-sm text-ink-deep">{f.q}</summary>
-                  <p className="mt-2 font-ui text-sm leading-relaxed text-ink-mid">{f.a}</p>
-                </details>
-              ))}
+            <div className="space-y-6 p-5">
+              <div className="space-y-2">
+                {[
+                  { q: 'AI注解是如何生成的？', a: '先以本地 BGE 中文向量模型将诗词编码为 512 维语义向量，在 16.7 万首诗的向量库中检索最相似的诗篇，连同诗人小传作为上下文，再由大模型生成字词释义、典故溯源、情感分析、格律分析四维度注解，每条均标注引用出处与相似度。' },
+                  { q: '风格迁移支持哪些诗人风格？', a: '目前支持李白体、苏轼体、婉约体、王维体、杜甫体五种风格，AI 会先向量检索该诗人的语义相近原作作为范例，再模仿其风格生成诗词。' },
+                  { q: '诗词数据来源是什么？', a: '基于GitHub开源项目chinese-poetry，收录约34万首唐宋诗词，公有领域零版权风险。' },
+                  { q: '如何收藏诗词？', a: '在诗词探索或注解页面点击收藏按钮，即可在「我的收藏」中查看。' },
+                  { q: '遇到内容问题怎么办？', a: 'AI 生成内容仅供参考，如发现注解有误或内容不当，可在下方提交「内容纠错」反馈，管理员会尽快核实处理。' },
+                ].map((f, i) => (
+                  <details key={i} className="rounded-lg px-4 py-3" style={{ background: 'var(--inset)' }}>
+                    <summary className="cursor-pointer font-ui text-sm text-ink-deep">{f.q}</summary>
+                    <p className="mt-2 font-ui text-sm leading-relaxed text-ink-mid">{f.a}</p>
+                  </details>
+                ))}
+              </div>
+
+              {/* 提交反馈 */}
+              <div>
+                <h4 className="mb-3 font-ui text-sm font-medium text-ink-deep">意见反馈</h4>
+                <form className="space-y-3 font-ui" onSubmit={submitFeedback}>
+                  <div className="flex flex-wrap gap-2">
+                    {FEEDBACK_TYPES.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setFbType(t)}
+                        className="rounded-full px-3 py-1.5 text-xs transition-ink"
+                        style={fbType === t ? { background: 'var(--btn-bg)', color: 'var(--btn-text)' } : { background: 'var(--inset)', color: 'var(--ink-mid)' }}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <textarea
+                      value={fbContent}
+                      onChange={(e) => setFbContent(e.target.value)}
+                      rows={4}
+                      maxLength={500}
+                      placeholder="请描述你遇到的问题或建议（5-500 字）…"
+                      className="w-full rounded-lg border-[1.5px] border-c bg-white/60 p-3 text-sm outline-none transition-ink focus:border-ink-deep"
+                    />
+                    <p className="mt-1 text-right text-xs text-ink-soft">{fbContent.length}/500</p>
+                  </div>
+                  <input
+                    value={fbContact}
+                    onChange={(e) => setFbContact(e.target.value)}
+                    maxLength={64}
+                    placeholder="联系方式（选填，便于回访）"
+                    className="h-10 w-full rounded-lg border-[1.5px] border-c bg-white/60 px-3 text-sm outline-none transition-ink focus:border-ink-deep"
+                  />
+                  <button type="submit" disabled={fbSending} className="h-10 w-full rounded-lg text-sm font-medium transition-ink hover:-translate-y-0.5 disabled:opacity-50" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
+                    {fbSending ? '提交中…' : '提交反馈'}
+                  </button>
+                </form>
+              </div>
+
+              {/* 我的反馈 */}
+              {fbItems !== null && (
+                <div>
+                  <h4 className="mb-3 font-ui text-sm font-medium text-ink-deep">我的反馈</h4>
+                  {fbItems.length === 0 ? (
+                    <p className="py-4 text-center font-ui text-xs text-ink-soft">暂无反馈记录</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {fbItems.map((f: any) => (
+                        <div key={f.id} className="rounded-lg p-3 font-ui" style={{ background: 'var(--inset)' }}>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{f.type}</span>
+                            <span className="rounded-full px-2 py-0.5 text-[10px]" style={f.status === 'resolved' ? { background: 'rgba(107,142,123,0.2)', color: '#4F7A5F' } : { background: 'rgba(166,140,90,0.15)', color: '#A67C50' }}>
+                              {f.status === 'resolved' ? '已回复' : '待处理'}
+                            </span>
+                            <span className="ml-auto text-[10px] text-ink-soft">{new Date(f.createdAt).toLocaleDateString('zh-CN')}</span>
+                          </div>
+                          <p className="mt-1.5 line-clamp-2 text-sm text-ink-mid">{f.content}</p>
+                          {f.reply && (
+                            <p className="mt-2 rounded-lg px-3 py-2 text-xs leading-relaxed" style={{ background: 'rgba(107,142,123,0.08)', color: '#4F7A5F' }}>
+                              管理员回复：{f.reply}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast, Toast } from '@/components/toast';
 import { FEEDBACK_TYPES } from '@/lib/community';
+import { getMotionPref, setMotionPref } from '@/components/motion-pref';
 
 type Sub = 'main' | 'favorites' | 'history' | 'creations' | 'notes' | 'settings' | 'help' | 'logout';
 
@@ -90,6 +91,16 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
   const [fbContact, setFbContact] = useState('');
   const [fbSending, setFbSending] = useState(false);
   const [fbItems, setFbItems] = useState<any[] | null>(null);
+
+  /* ---- 无障碍：界面动效开关（localStorage 持久化） ---- */
+  const [motionOff, setMotionOff] = useState(false);
+  useEffect(() => { setMotionOff(getMotionPref()); }, []);
+  function toggleMotion() {
+    const next = !motionOff;
+    setMotionOff(next);
+    setMotionPref(next);
+    show(next ? '动效已关闭，页面更安静' : '动效已开启');
+  }
 
   const loadCounts = useCallback(async () => {
     try {
@@ -415,6 +426,28 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                     {savingPwd ? '提交中…' : '确认修改'}
                   </button>
                 </form>
+              </section>
+
+              {/* 界面动效（无障碍） */}
+              <section>
+                <h4 className="mb-2 text-sm font-medium text-ink-deep">界面动效</h4>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!motionOff}
+                  onClick={toggleMotion}
+                  className="flex items-center gap-3"
+                  title={motionOff ? '动效已关闭，点击开启' : '动效开启中，点击关闭'}
+                >
+                  <span
+                    className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-ink"
+                    style={motionOff ? { background: '#C9CFD6' } : { background: 'var(--brand-grad)' }}
+                  >
+                    <span className={`absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${motionOff ? '' : 'translate-x-5'}`} />
+                  </span>
+                  <span className="text-sm text-ink-mid">{motionOff ? '已关闭（减少动态效果）' : '已开启'}</span>
+                </button>
+                <p className="mt-1.5 text-xs text-ink-soft">关闭后登录页水墨动画、入场过渡等装饰动效将静止，降低视觉干扰；设置自动保存，全局生效</p>
               </section>
             </div>
           )}

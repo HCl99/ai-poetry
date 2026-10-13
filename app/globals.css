@@ -223,6 +223,7 @@
 }
 .anim-pulse-ring { animation: pulseRing 1.4s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .anim-pulse-ring { animation: none; } }
+html.motion-off .anim-pulse-ring { animation: none; }
 @keyframes floatDrift {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-12px); }
@@ -234,6 +235,11 @@
 @media (prefers-reduced-motion: reduce) {
   .anim-page, .anim-fade-up, .anim-fade-in, .anim-scale-in, .anim-float { animation: none; }
 }
+html.motion-off .anim-page,
+html.motion-off .anim-fade-up,
+html.motion-off .anim-fade-in,
+html.motion-off .anim-scale-in,
+html.motion-off .anim-float { animation: none; }
 .anim-scale-in { animation: scaleIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
 .anim-float { animation: floatDrift 6s ease-in-out infinite; }
 .spinner {
@@ -321,3 +327,9 @@
   .anim-ink-spread,
   .type-caret { animation: none; }
 }
+/* 无障碍：设置中手动关闭动效（localStorage 持久化，与系统偏好等效） */
+html.motion-off .anim-ink-float,
+html.motion-off .anim-ink-drift,
+html.motion-off .anim-ink-breathe,
+html.motion-off .anim-ink-spread,
+html.motion-off .type-caret { animation: none; }

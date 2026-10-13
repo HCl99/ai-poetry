@@ -43,6 +43,18 @@ export async function POST(req: Request) {
   const used = (played || []).map(strip);
   const norm = strip(playerLine);
 
+  /* ---- 硬校验 0：乱码/非法输入拦截（省 GLM 审校开销） ---- */
+  if (/[\u0000-\u001f\uFFFD]/.test(playerLine)) {
+    return Response.json({ valid: false, reason: '输入包含乱码或非法字符，请重新输入' });
+  }
+  const hanCount = (norm.match(/[\u4e00-\u9fa5]/g) || []).length;
+  if (hanCount < 2) {
+    return Response.json({ valid: false, reason: '请输入中文诗句（至少含两个汉字）' });
+  }
+  if (norm.length > 40) {
+    return Response.json({ valid: false, reason: '单句过长（40 字以内），请核对后重新输入' });
+  }
+
   /* ---- 硬校验 1：必须包含令字 ---- */
   if (!norm.includes(char)) {
     return Response.json({ valid: false, reason: `诗句中需要包含令字「${char}」` });

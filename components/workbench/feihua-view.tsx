@@ -1,13 +1,17 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Swords, RotateCcw, Flag, CheckCheck, Sparkles } from 'lucide-react';
+import { Swords, RotateCcw, Flag, CheckCheck, Sparkles, Lightbulb } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 
 const PRESET_CHARS = ['花', '月', '春', '风', '雪', '山', '水', '云', '夜', '酒'];
 
+const MAX_HINTS = 3;
+
 interface Source { title: string; author: string; dynasty: string }
 interface Move { side: 'user' | 'ai'; text: string; source?: Source; judged?: boolean }
+
+const strip = (s: string) => s.replace(/[，。？！、；：''""\s《》·\-—]/g, '');
 
 export function FeihuaView() {
   const [char, setChar] = useState('');
@@ -17,6 +21,8 @@ export function FeihuaView() {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [over, setOver] = useState<null | 'win' | 'lose'>(null);
+  const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
+  const [hintLoading, setHintLoading] = useState(false);
   const { msg, show } = useToast();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -26,12 +32,28 @@ export function FeihuaView() {
     setMoves([]);
     setOver(null);
     setPlaying(true);
+    setHintsLeft(MAX_HINTS);
+    setInput('');
     show(`飞花令开始 · 令字「${c}」，请你先出句`);
+  }
+
+  /** 出句前本地预检：乱码/重复即时反馈，不打扰后端 */
+  function localCheck(line: string): string | null {
+    const norm = strip(line);
+    const hanCount = (norm.match(/[\u4e00-\u9fa5]/g) || []).length;
+    if (hanCount < 2) return '请输入中文诗句（至少含两个汉字）';
+    if (norm.length > 40) return '单句过长（40 字以内）';
+    if (!norm.includes(char)) return `诗句中需要包含令字「${char}」`;
+    const used = moves.filter((m) => m.side === 'user').map((m) => strip(m.text));
+    if (used.includes(norm)) return '这句已经有人说过了，换一句';
+    return null;
   }
 
   async function submit() {
     const line = input.trim();
     if (!line || thinking || over) return;
+    const localErr = localCheck(line);
+    if (localErr) { show(localErr); return; }
     setInput('');
     setThinking(true);
     try {
@@ -57,6 +79,31 @@ export function FeihuaView() {
     } finally {
       setThinking(false);
       setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 60);
+    }
+  }
+
+  /** 求提示：从全库取一句未使用过的含令字诗句，填入输入框供参考 */
+  async function askHint() {
+    if (hintsLeft <= 0 || hintLoading || thinking || over) return;
+    setHintLoading(true);
+    try {
+      const r = await fetch('/api/feihua/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ char, played: moves.filter((m) => m.side === 'user').map((m) => m.text) }),
+      });
+      const d = await r.json();
+      if (!r.ok) { show(d.error || '获取提示失败'); return; }
+      if (d.exhausted) { show('诗库中已找不到未用过的新句，试试认输或换字'); setHintsLeft(0); return; }
+      if (d.hint?.text) {
+        setInput(d.hint.text);
+        show(`提示出处：〔${d.hint.source.dynasty}〕${d.hint.source.author}《${d.hint.source.title}》`);
+      }
+      setHintsLeft((v) => Math.max(0, v - 1));
+    } catch {
+      show('网络异常，请重试');
+    } finally {
+      setHintLoading(false);
     }
   }
 
@@ -113,6 +160,7 @@ export function FeihuaView() {
             <li>诗句必须真实存在：全库可查的名句直接溯源出典</li>
             <li>全库未收录的名句由 GLM 审校判定真伪，判定结果会标注</li>
             <li>句子不可重复，接不上的一方落败</li>
+            <li>卡住时可「求提示」，每局限 3 次，用完按钮置灰</li>
           </ol>
         </div>
         <Toast msg={msg} />
@@ -200,23 +248,40 @@ export function FeihuaView() {
 
         {/* 输入 */}
         {!over && (
-          <div className="mt-5 flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !(e.nativeEvent as KeyboardEvent).isComposing) submit(); }}
-              disabled={thinking}
-              placeholder={`吟一句含「${char}」的诗句…（Enter 出句）`}
-              className="h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-c bg-white/70 px-3.5 font-serif text-sm outline-none transition-ink focus:border-ink-deep disabled:opacity-60"
-            />
-            <button
-              onClick={submit}
-              disabled={thinking || !input.trim()}
-              className="h-11 shrink-0 rounded-lg px-6 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
-              style={{ background: 'var(--btn-grad)', color: '#fff' }}
-            >
-              {thinking ? <span className="spinner" style={{ width: 14, height: 14 }} /> : '出句'}
-            </button>
+          <div className="mt-5 space-y-2">
+            <div className="flex gap-2">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !(e.nativeEvent as KeyboardEvent).isComposing) submit(); }}
+                disabled={thinking}
+                placeholder={`吟一句含「${char}」的诗句…（Enter 出句）`}
+                className="h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-c bg-white/70 px-3.5 font-serif text-sm outline-none transition-ink focus:border-ink-deep disabled:opacity-60"
+              />
+              <button
+                onClick={submit}
+                disabled={thinking || !input.trim()}
+                className="h-11 shrink-0 rounded-lg px-6 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+                style={{ background: 'var(--btn-grad)', color: '#fff' }}
+              >
+                {thinking ? <span className="spinner" style={{ width: 14, height: 14 }} /> : '出句'}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={askHint}
+                disabled={hintsLeft <= 0 || hintLoading || thinking}
+                title={hintsLeft <= 0 ? '本局提示已用完' : '从诗库取一句未用过的含令字诗句'}
+                className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] px-3 py-1.5 font-ui text-xs transition-ink disabled:cursor-not-allowed disabled:opacity-40"
+                style={hintsLeft <= 0 ? { borderColor: 'var(--border-c)', color: 'var(--ink-soft)', background: 'var(--inset)' } : { borderColor: 'rgba(196,169,101,0.5)', color: '#8B7355' }}
+              >
+                <Lightbulb className="h-3.5 w-3.5" />
+                {hintLoading ? '翻找诗库…' : '求提示'}
+              </button>
+              <span className={`font-ui text-xs ${hintsLeft <= 0 ? 'text-ink-soft/60' : 'text-ink-soft'}`}>
+                {hintsLeft > 0 ? `本局剩余提示 ${hintsLeft}/${MAX_HINTS}` : '提示已耗尽'}
+              </span>
+            </div>
           </div>
         )}
       </div>

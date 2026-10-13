@@ -56,6 +56,11 @@ export function PasswordInput({
   onBlur?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const [show, setShow] = useState(false);
+  const [caps, setCaps] = useState(false);
+  // 大写锁定监测：按下/抬起任意键时同步状态，开启时在框下提示
+  function trackCaps(e: React.KeyboardEvent<HTMLInputElement>) {
+    setCaps(e.getModifierState?.('CapsLock') ?? false);
+  }
   return (
     <div className="relative">
       <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><LockIcon /></span>
@@ -68,6 +73,8 @@ export function PasswordInput({
         placeholder={placeholder}
         onChange={onChange}
         onBlur={onBlur}
+        onKeyDown={trackCaps}
+        onKeyUp={trackCaps}
         className={PASSWORD_INPUT_CLASS}
       />
       <button
@@ -79,6 +86,11 @@ export function PasswordInput({
       >
         <EyeIcon off={show} />
       </button>
+      {caps && (
+        <p className="mt-1.5 text-xs" style={{ color: '#C4A965' }} role="status">
+          大写锁定已开启
+        </p>
+      )}
     </div>
   );
 }

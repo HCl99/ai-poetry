@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { authenticate } from './actions';
 import { PasswordInput, TEXT_INPUT_CLASS } from '@/components/password-input';
 import { WechatLoginButton } from '@/components/wechat-login';
+import { FormError } from '@/components/form-error';
 
 const REMEMBER_KEY = 'moyun:remembered-email';
 
@@ -82,17 +83,13 @@ export function LoginForm() {
         <span>忘记密码？请联系管理员重置</span>
       </div>
 
-      {error && (
-        <div className="rounded-lg px-3 py-2 text-center text-sm" style={{ background: 'rgba(166,124,124,0.1)', color: '#A67C7C' }}>
-          {error}
-        </div>
-      )}
+      <FormError msg={error} />
 
       <button
         type="submit"
         disabled={loading}
         className="flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-[15px] font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover disabled:opacity-60"
-        style={{ background: '#3A3835' }}
+        style={{ background: 'linear-gradient(135deg,#3A3835,#5D5853)' }}
       >
         {loading && <span className="spinner" style={{ width: 16, height: 16 }} />}
         {loading ? '登录中…' : '登  录'}

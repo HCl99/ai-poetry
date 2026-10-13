@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { registerUser } from './actions';
 import { PasswordInput, TEXT_INPUT_CLASS } from '@/components/password-input';
 import { WechatLoginButton } from '@/components/wechat-login';
+import { FormError } from '@/components/form-error';
 
 function MailIcon() {
   return (
@@ -23,10 +24,30 @@ function UserIcon() {
   );
 }
 
+/** 密码强度：0 未输入 / 1 弱 / 2 中 / 3 强——长度与字符种类（小写/大写/数字/符号）综合计分 */
+function pwdStrength(v: string): 0 | 1 | 2 | 3 {
+  if (!v) return 0;
+  if (v.length < 6) return 1;
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(v)).length;
+  if (v.length >= 10 && kinds >= 3) return 3;
+  if (kinds >= 2 && v.length >= 8) return 3;
+  if (kinds >= 2 || v.length >= 8) return 2;
+  return 1;
+}
+
+const STRENGTH_META = [
+  { label: '', color: '' },
+  { label: '弱', color: '#A67C7C' },
+  { label: '中', color: '#C4A965' },
+  { label: '强', color: '#6B8E7B' },
+] as const;
+
 export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmMsg, setConfirmMsg] = useState('');
+  const [pwd, setPwd] = useState('');
+  const strength = pwdStrength(pwd);
 
   /** 确认密码即时比对：输入即提示，不留到提交后 */
   function checkConfirm(e: React.ChangeEvent<HTMLInputElement>) {
@@ -77,7 +98,33 @@ export function RegisterForm() {
         <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><MailIcon /></span>
         <input name="email" type="email" required placeholder="邮箱" autoComplete="email" className={TEXT_INPUT_CLASS} />
       </div>
-      <PasswordInput name="password" placeholder="密码（至少 6 位）" required minLength={6} autoComplete="new-password" />
+      <div>
+        <PasswordInput
+          name="password"
+          placeholder="密码（至少 6 位）"
+          required
+          minLength={6}
+          autoComplete="new-password"
+          onChange={(e) => setPwd(e.currentTarget.value)}
+        />
+        {/* 密码强度指示：三段墨色条 + 档位标签，输入时实时更新 */}
+        {strength > 0 && (
+          <div className="mt-2 flex items-center gap-2" aria-live="polite">
+            <div className="flex flex-1 gap-1.5">
+              {[1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className="h-1 flex-1 rounded-full transition-ink"
+                  style={{ background: i <= strength ? STRENGTH_META[strength].color : 'var(--border-light)' }}
+                />
+              ))}
+            </div>
+            <span className="w-4 font-ui text-xs" style={{ color: STRENGTH_META[strength].color }}>
+              {STRENGTH_META[strength].label}
+            </span>
+          </div>
+        )}
+      </div>
       <div>
         <PasswordInput
           name="confirm"
@@ -93,17 +140,13 @@ export function RegisterForm() {
         )}
       </div>
 
-      {error && (
-        <div className="rounded-lg px-3 py-2 text-center text-sm" style={{ background: 'rgba(166,124,124,0.1)', color: '#A67C7C' }}>
-          {error}
-        </div>
-      )}
+      <FormError msg={error} />
 
       <button
         type="submit"
         disabled={loading}
         className="flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-[15px] font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover disabled:opacity-60"
-        style={{ background: '#3A3835' }}
+        style={{ background: 'linear-gradient(135deg,#3A3835,#5D5853)' }}
       >
         {loading && <span className="spinner" style={{ width: 16, height: 16 }} />}
         {loading ? '注册中…' : '注  册'}

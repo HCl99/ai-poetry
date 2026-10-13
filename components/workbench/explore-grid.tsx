@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useToast, Toast } from '@/components/toast';
 
@@ -50,7 +51,7 @@ export function ExploreGrid({
   dynastyCounts: Record<string, number>;
 }) {
   const [keyword, setKeyword] = useState(q);
-  const { msg, show } = useToast();
+  const { msg } = useToast();
 
   const tabs = ['全部', ...Object.keys(DYNASTY_LABEL).filter((d) => (dynastyCounts[d] || 0) > 0)];
 
@@ -101,10 +102,10 @@ export function ExploreGrid({
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {poems.map((p) => (
-            <div
+            <Link
               key={p.id}
-              onClick={() => show(`《${p.title}》${p.author}`)}
-              className="paper-card paper-card-hover relative cursor-pointer overflow-hidden px-6 py-6"
+              href={`/workbench/poem/${p.id}`}
+              className="paper-card paper-card-hover relative block overflow-hidden px-6 py-6"
             >
               <span className="absolute top-0 left-0 h-0.5 w-full opacity-0 transition-ink" style={{ background: 'linear-gradient(90deg,#7B8EA1,#8B7355)' }} />
               <div className="flex items-start justify-between">
@@ -123,7 +124,7 @@ export function ExploreGrid({
                   ))}
                 </div>
               )}
-            </div>
+            </Link>
           ))}
         </div>
       )}

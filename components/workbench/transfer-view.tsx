@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Download, Volume2, Square, Image as ImageIcon, Share2, ScrollText } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useSpeech } from '@/lib/use-speech';
 import { sseEvents } from '@/lib/sse';
 import { ShareCard, downloadSharePng } from './share-card';
 import { ScrollCard } from './scroll-card';
+import { SpeechSettingsPanel } from './speech-panel';
 
 const STYLES = [
   { key: 'libai', name: '李白体', hint: '浪漫飘逸 · 想象瑰奇' },
@@ -29,7 +31,7 @@ export function TransferView() {
   const [stepText, setStepText] = useState('');
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [error, setError] = useState('');
-  const [speaking, setSpeaking] = useState(false);
+  const speech = useSpeech();
   const [inkUrl, setInkUrl] = useState('');
   const [inkLoading, setInkLoading] = useState(false);
   const [inkError, setInkError] = useState(false);
@@ -60,18 +62,11 @@ export function TransferView() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  /** Web Speech API 朗读生成诗词 */
+  /** 朗读生成诗词（跟随全局语速/音色设置），再次点击停止 */
   function speak() {
-    if (!('speechSynthesis' in window)) { show('当前浏览器不支持语音合成'); return; }
-    if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(poem);
-    u.lang = 'zh-CN';
-    u.rate = 0.85;
-    u.onend = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
-    setSpeaking(true);
-    window.speechSynthesis.speak(u);
+    if (!speech.supported) { show('当前浏览器不支持语音合成'); return; }
+    if (!poem) return;
+    speech.speak('transfer-poem', poem);
   }
 
   /** CogView-3-Flash 生成水墨意境图 */
@@ -114,8 +109,7 @@ export function TransferView() {
     setInkError(false);
     setInkZoom(false);
     setShareNoInk(false);
-    setSpeaking(false);
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    speech.stop();
     try {
       const r = await fetch('/api/transfer', {
         method: 'POST',
@@ -381,9 +375,12 @@ export function TransferView() {
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
                     title="朗读生成诗词"
                   >
-                    {speaking ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                    {speaking ? '停止' : '朗读'}
+                    {speech.speakingKey === 'transfer-poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                    {speech.speakingKey === 'transfer-poem' ? '停止' : '朗读'}
                   </button>
+                  <span className="inline-flex items-center rounded-lg border-[1.5px] border-c px-1 py-1.5">
+                    <SpeechSettingsPanel settings={speech.settings} voices={speech.voices} onChange={speech.updateSettings} />
+                  </span>
                   <button
                     onClick={inkpaint}
                     disabled={inkLoading}

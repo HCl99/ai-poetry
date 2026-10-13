@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { Volume2, Square } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useSpeech } from '@/lib/use-speech';
+import { SpeechSettingsPanel } from './speech-panel';
 
 interface PoemMeta {
   id: string;
@@ -29,6 +32,14 @@ export function PoemDetailView({ poem, bio, initial }: {
   const [source, setSource] = useState(initial.source);
   const [loading, setLoading] = useState(false);
   const { msg, show } = useToast();
+  const speech = useSpeech();
+
+  /** 朗读诗文：先题名/朝代/作者，再逐句朗读，当前句高亮 */
+  function toggleRead() {
+    if (!speech.supported) { show('当前浏览器不支持语音合成'); return; }
+    if (speech.speakingKey === 'detail-poem') { speech.stop(); return; }
+    speech.speakLines('detail-poem', [`${poem.title}。${poem.dynasty}代，${poem.author}。`, ...poem.lines]);
+  }
 
   async function generate() {
     setLoading(true);
@@ -73,9 +84,24 @@ export function PoemDetailView({ poem, bio, initial }: {
 
       <div className="my-6 ink-divider" />
 
+      {/* 朗读控制（卡片右上角）：逐句朗读当前句高亮 */}
+      <div className="absolute right-5 top-5 flex items-center gap-1">
+        <button
+          onClick={toggleRead}
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-white/70 hover:text-ink-deep"
+          title="朗读诗文（当前句高亮）"
+        >
+          {speech.speakingKey === 'detail-poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+          {speech.speakingKey === 'detail-poem' ? '停止' : '朗读'}
+        </button>
+        <SpeechSettingsPanel settings={speech.settings} voices={speech.voices} onChange={speech.updateSettings} />
+      </div>
+
       {/* 诗文 */}
       <div className="space-y-1 text-center font-serif text-lg leading-[2.3] text-ink-deep">
-        {poem.lines.map((l, i) => <p key={i}>{l}</p>)}
+        {poem.lines.map((l, i) => (
+          <p key={i} style={speech.speakingKey === 'detail-poem' && speech.activeLine === i + 1 ? { background: 'rgba(107,142,123,0.15)', borderRadius: 4 } : undefined}>{l}</p>
+        ))}
       </div>
 
       {poem.tags.length > 0 && (

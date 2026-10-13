@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare, Palette } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useSpeech } from '@/lib/use-speech';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
 import { ShareCard, downloadSharePng } from './share-card';
+import { SpeechSettingsPanel } from './speech-panel';
 
 interface PoemItem {
   id: string; title: string; author: string; dynasty: string;
@@ -54,6 +56,11 @@ const DYNASTY_CLASS: Record<string, string> = {
   唐: 'dynasty-tang', 宋: 'dynasty-song', 元: 'dynasty-yuan', 明清: 'dynasty-mingqing',
 };
 
+/** 诗文按标点断句（朗读高亮与渲染共用，索引与 speakLines 队列偏移 1 对齐） */
+function poemLinesOf(first: string) {
+  return first ? first.split(/(?<=[，。？！；])/).filter(Boolean) : [];
+}
+
 export function AnnotateView() {
   const [poems, setPoems] = useState<PoemItem[]>([]);
   const [selected, setSelected] = useState<PoemItem | null>(null);
@@ -63,7 +70,7 @@ export function AnnotateView() {
   const [fav, setFav] = useState(false);
   const fullRef = useRef('');
   const [showSteps, setShowSteps] = useState(false);
-  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+  const speech = useSpeech();
   const [vertical, setVertical] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { msg, show } = useToast();
@@ -141,18 +148,17 @@ export function AnnotateView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, selected]);
 
-  /** Web Speech API 朗读某一维度内容，再次点击停止 */
-  function speak(key: string, text: string) {
-    if (!('speechSynthesis' in window)) { show('当前浏览器不支持语音合成'); return; }
-    if (speakingKey === key) { window.speechSynthesis.cancel(); setSpeakingKey(null); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-CN';
-    u.rate = 0.9;
-    u.onend = () => setSpeakingKey(null);
-    u.onerror = () => setSpeakingKey(null);
-    setSpeakingKey(key);
-    window.speechSynthesis.speak(u);
+  /** 朗读某一维度内容（跟随全局语速/音色设置），再次点击停止 */
+  function readAloud(key: string, text: string) {
+    if (!speech.supported) { show('当前浏览器不支持语音合成'); return; }
+    speech.speak(key, text);
+  }
+
+  /** 朗读原诗：先题名/朝代/作者，再逐句朗读，当前句高亮 */
+  function readPoem() {
+    if (!selected) return;
+    if (!speech.supported) { show('当前浏览器不支持语音合成'); return; }
+    speech.speakLines('poem', [`${selected.title}。${selected.dynasty}代，${selected.author}。`, ...poemLinesOf(selected.first)]);
   }
 
   useEffect(() => {
@@ -235,8 +241,7 @@ export function AnnotateView() {
     setStream(null);
     setFollowups([]);
     setShowSteps(false);
-    setSpeakingKey(null);
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    speech.stop();
     fullRef.current = '';
 
     // 首个检索 step 可能早于 meta 到达，先建空骨架
@@ -489,13 +494,14 @@ export function AnnotateView() {
                       {vertical ? '横排' : '竖排'}
                     </button>
                     <button
-                      onClick={() => speak('poem', `${selected.title}。${selected.dynasty}代，${selected.author}。${selected.first}`)}
+                      onClick={readPoem}
                       className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-white/70 hover:text-ink-deep"
-                      title="朗读原诗"
+                      title="朗读原诗（当前句高亮）"
                     >
-                      {speakingKey === 'poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                      {speakingKey === 'poem' ? '停止' : '朗读'}
+                      {speech.speakingKey === 'poem' ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      {speech.speakingKey === 'poem' ? '停止' : '朗读'}
                     </button>
+                    <SpeechSettingsPanel settings={speech.settings} voices={speech.voices} onChange={speech.updateSettings} />
                   </div>
                   <div className="text-center">
                     <span className={`dynasty-tag ${DYNASTY_CLASS[selected.dynasty] || 'dynasty-tang'}`}>{selected.dynasty}</span>
@@ -509,8 +515,8 @@ export function AnnotateView() {
                         className="mx-auto overflow-x-auto py-1 font-serif text-base text-ink-mid"
                         style={{ writingMode: 'vertical-rl', height: 300, letterSpacing: '0.3em' }}
                       >
-                        {selected.first ? selected.first.split(/(?<=[，。？！；])/).filter(Boolean).map((l, i) => (
-                          <p key={i} style={{ marginLeft: i === 0 ? 0 : '1.2em', lineHeight: 1.9 }}>{l}</p>
+                        {selected.first ? poemLinesOf(selected.first).map((l, i) => (
+                          <p key={i} style={{ marginLeft: i === 0 ? 0 : '1.2em', lineHeight: 1.9, ...(speech.speakingKey === 'poem' && speech.activeLine === i + 1 ? { background: 'rgba(107,142,123,0.18)', borderRadius: 4 } : {}) }}>{l}</p>
                         )) : <p>（无正文）</p>}
                       </div>
                       {/* 印章点缀 */}
@@ -523,7 +529,9 @@ export function AnnotateView() {
                     </div>
                   ) : (
                     <div className="text-center font-serif text-base leading-[2.5] text-ink-mid">
-                      {selected.first ? selected.first.split(/(?<=[，。？！；])/).filter(Boolean).map((l, i) => <p key={i}>{l}</p>) : <p>（无正文）</p>}
+                      {selected.first ? poemLinesOf(selected.first).map((l, i) => (
+                        <p key={i} style={speech.speakingKey === 'poem' && speech.activeLine === i + 1 ? { background: 'rgba(107,142,123,0.18)', borderRadius: 4 } : undefined}>{l}</p>
+                      )) : <p>（无正文）</p>}
                     </div>
                   )}
                 </div>
@@ -670,12 +678,12 @@ export function AnnotateView() {
                         <Sparkles className="h-3.5 w-3.5 text-sepia" /> {d.tag}
                         {d.content && (
                           <button
-                            onClick={() => speak(d.key, `${d.tag}。${d.content}`)}
+                            onClick={() => readAloud(d.key, `${d.tag}。${d.content}`)}
                             className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-ui text-xs text-ink-soft transition-ink hover:bg-white/60 hover:text-ink-deep"
                             title="朗读本维度"
                           >
-                            {speakingKey === d.key ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-                            {speakingKey === d.key ? '停止' : '朗读'}
+                            {speech.speakingKey === d.key ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                            {speech.speakingKey === d.key ? '停止' : '朗读'}
                           </button>
                         )}
                       </div>

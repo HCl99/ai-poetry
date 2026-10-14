@@ -9,12 +9,13 @@ import { ShareCard, downloadSharePng } from './share-card';
 import { ScrollCard } from './scroll-card';
 import { SpeechSettingsPanel } from './speech-panel';
 
+/** 风格 ↔ 体裁一一对应：唐代诗人作诗（绝句/律诗），宋代词人作词（指定词牌） */
 const STYLES = [
-  { key: 'libai', name: '李白体', hint: '浪漫飘逸 · 想象瑰奇' },
-  { key: 'sushi', name: '苏轼体', hint: '旷达豪放 · 超然物外' },
-  { key: 'wanyue', name: '婉约体', hint: '婉转含蓄 · 细腻缠绵' },
-  { key: 'wangwei', name: '王维体', hint: '空灵静谧 · 诗中有画' },
-  { key: 'dufu', name: '杜甫体', hint: '沉郁顿挫 · 忧国忧民' },
+  { key: 'libai', name: '李白体', form: '七言绝句', hint: '浪漫飘逸 · 想象瑰奇' },
+  { key: 'sushi', name: '苏轼体', form: '豪放词 · 定风波', hint: '旷达豪放 · 超然物外' },
+  { key: 'wanyue', name: '婉约体', form: '婉约词 · 浣溪沙', hint: '婉转含蓄 · 细腻缠绵' },
+  { key: 'wangwei', name: '王维体', form: '五言绝句', hint: '空灵静谧 · 诗中有画' },
+  { key: 'dufu', name: '杜甫体', form: '七言律诗', hint: '沉郁顿挫 · 忧国忧民' },
 ];
 
 const EXAMPLE = '下雨天一个人走回家，路上想起了远方的朋友';
@@ -261,14 +262,16 @@ export function TransferView() {
                     ? { background: 'var(--btn-bg)', color: 'var(--btn-text)', borderColor: 'var(--btn-bg)' }
                     : { borderColor: 'var(--border-c)', color: 'var(--ink-mid)' }
                 }
-                title={s.hint}
+                title={`${s.hint} · 体裁：${s.form}`}
               >
                 {s.name}
+                <span className="ml-1.5 font-ui text-[11px] opacity-70">{s.form}</span>
               </button>
             ))}
           </div>
           <p className="mt-2.5 font-ui text-xs text-ink-soft">
             {STYLES.find((s) => s.key === style)?.hint}
+            <span className="ml-2 text-sepia">体裁：{STYLES.find((s) => s.key === style)?.form}</span>
           </p>
 
           <h2 className="mb-3 mt-6 font-ui text-[15px] font-medium text-ink-deep">输入现代文</h2>

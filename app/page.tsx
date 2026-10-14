@@ -4,12 +4,12 @@ import { redirect } from 'next/navigation';
 export const dynamic = 'force-dynamic';
 
 /**
- * 首页入口：打开即直达核心体验。
- * 未登录 → 跳转登录/注册页；已登录 → 跳转工作台。
- * （v2.5 移除落地页，首页不再渲染营销展示）
+ * 首页入口（v2.5 三层导航）：
+ * 未登录 → 跳转登录/注册页；已登录 → 跳转系统首页（独立门户页 /home）。
+ * 门户页再由用户点击进入带侧栏的功能工作台 /workbench。
  */
 export default async function HomePage() {
   const session = await auth();
-  if (session?.user) redirect('/workbench');
+  if (session?.user) redirect('/home');
   redirect('/login');
 }

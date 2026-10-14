@@ -16,7 +16,7 @@ export async function authenticate(formData: FormData): Promise<string> {
     await signIn('credentials', {
       email: formData.get('email'),
       password: formData.get('password'),
-      redirectTo: '/workbench',
+      redirectTo: '/home',
     });
     return '';
   } catch (error) {

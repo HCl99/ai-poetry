@@ -7,6 +7,7 @@ import { ProfileModal } from './profile-modal';
 import { InkAmbience } from './ink-ambience';
 
 const NAV = [
+  { key: 'portal', label: '系统首页', href: '/home', icon: 'portal' },
   { key: 'dashboard', label: '工作台', href: '/workbench', icon: 'home' },
   { key: 'explore', label: '诗词探索', href: '/workbench/explore', icon: 'book' },
   { key: 'assistant', label: 'AI 助手', href: '/workbench/assistant', icon: 'bot', badge: 'AI' },
@@ -30,6 +31,7 @@ function NavIcon({ name }: { name: string }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (name) {
     case 'home': return <svg {...common}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>;
+    case 'portal': return <svg {...common}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" /></svg>;
     case 'book': return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>;
     case 'grad': return <svg {...common}><path d="M22 9 12 4 2 9l10 5 10-5z" /><path d="M6 11.5V16c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5" /><path d="M22 9v5" /></svg>;
     case 'sparkles': return <svg {...common}><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" /></svg>;

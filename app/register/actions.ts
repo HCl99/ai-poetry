@@ -43,6 +43,6 @@ export async function registerUser(formData: FormData): Promise<{ error?: string
   });
 
   // 注册成功后自动登录（signIn 携 redirectTo 时内部完成跳转）
-  await signIn('credentials', { email, password, redirectTo: '/workbench' });
-  redirect('/workbench');
+  await signIn('credentials', { email, password, redirectTo: '/home' });
+  redirect('/home');
 }

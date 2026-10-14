@@ -16,6 +16,35 @@ function greeting() {
   return '晚上好';
 }
 
+/**
+ * 注解/问答日志的 userQuery 以英文前缀区分来源（assistant:/followup:/annotate:/compare:/eval:），
+ * 面向用户展示时统一中文化，避免界面出现英文；兼容早期已入库的日志。
+ */
+function prettyQuery(raw: string | null): string {
+  if (!raw) return 'AI 注解';
+  const i = raw.indexOf(':');
+  const kind = i > 0 ? raw.slice(0, i) : '';
+  const rest = i > 0 ? raw.slice(i + 1) : raw;
+  switch (kind) {
+    case 'assistant':
+      return `AI 助手 · ${rest}`;
+    case 'followup': {
+      const j = rest.indexOf(':');
+      return j > 0 ? `追问《${rest.slice(0, j)}》· ${rest.slice(j + 1)}` : `追问 · ${rest}`;
+    }
+    case 'annotate':
+      return `AI 注解 · 《${rest}》`;
+    case 'compare': {
+      const j = rest.indexOf(':');
+      return j > 0 ? `多模型对比 · 《${rest.slice(0, j)}》· ${rest.slice(j + 1)}` : `多模型对比 · ${rest}`;
+    }
+    case 'eval':
+      return `RAG 评测 · 《${rest}》`;
+    default:
+      return raw;
+  }
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   const uid = session!.user.id!;
@@ -248,7 +277,7 @@ export default async function DashboardPage() {
             {agentLogs.map((l) => (
               <div key={l.id.toString()} className="relative">
                 <span className="absolute -left-5 top-1 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
-                <div className="font-ui text-sm text-ink-deep">{l.userQuery || 'AI注解'}</div>
+                <div className="font-ui text-sm text-ink-deep">{prettyQuery(l.userQuery)}</div>
                 <p className="mt-0.5 font-ui text-xs text-ink-soft">
                   glm-4-flash · 知识库检索 {(l.retrievedChunks as string[] | null)?.length ?? 0} 篇 · {l.latencyMs ?? 0}ms
                 </p>

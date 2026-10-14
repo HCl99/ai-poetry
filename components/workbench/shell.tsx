@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ProfileModal } from './profile-modal';
@@ -25,6 +25,13 @@ const NAV = [
   { key: 'stats', label: '数据大屏', href: '/workbench/stats', icon: 'chart' },
   { key: 'mcp', label: 'MCP 工具', href: '/workbench/mcp', icon: 'plug' },
   { key: 'community', label: '作品社区', href: '/workbench/community', icon: 'users' },
+];
+
+/** 通知面板的「系统公告」：展示近期平台能力更新（真实已上线功能） */
+const ANNOUNCEMENTS = [
+  { title: 'AI 教学课件生成已上线', desc: '诗词详情页可一键生成七节结构课件', date: '10/13' },
+  { title: '飞花令新增「求提示」', desc: '每局 3 次，可参考未用过的含令字诗句', date: '10/13' },
+  { title: '朗读增强上线', desc: '支持语速与音色设置、逐句高亮跟读', date: '10/12' },
 ];
 
 function NavIcon({ name }: { name: string }) {
@@ -59,6 +66,33 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [dark, setDark] = useState(false);
+
+  // 通知面板：系统公告 + 我的最近动态（真实数据）
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState<{ id: string; typeLabel: string; title: string; time: string; color: string }[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // 点击面板外关闭
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  // 展开时拉取最近动态（仅首次）
+  useEffect(() => {
+    if (!notifOpen || notifs.length > 0) return;
+    setNotifLoading(true);
+    fetch('/api/user/history')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => setNotifs(Array.isArray(list) ? list.slice(0, 6) : []))
+      .catch(() => {})
+      .finally(() => setNotifLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifOpen]);
 
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
@@ -115,10 +149,54 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></svg>
               )}
             </button>
-            <Link href="/workbench" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-ink-mid transition-ink hover:bg-paper-dark" aria-label="通知">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: '#A67C7C' }} />
-            </Link>
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setNotifOpen((v) => !v)}
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg text-ink-mid transition-ink hover:bg-paper-dark"
+                aria-label="通知"
+                aria-expanded={notifOpen}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: '#A67C7C' }} />
+              </button>
+              {notifOpen && (
+                <div
+                  className="anim-fade-up absolute right-0 top-11 z-50 w-[330px] overflow-hidden rounded-xl border border-light shadow-ink"
+                  style={{ background: 'var(--paper-light)' }}
+                >
+                  <div className="border-b border-light px-4 py-3 font-ui text-sm font-medium text-ink-deep">通知</div>
+                  <div className="max-h-[360px] overflow-y-auto">
+                    <div className="px-4 pb-1 pt-3 font-ui text-[11px] text-ink-soft">系统公告</div>
+                    {ANNOUNCEMENTS.map((a) => (
+                      <div key={a.title} className="px-4 py-2.5 transition-ink hover:bg-paper-dark">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-ui text-[13px] font-medium text-ink-deep">{a.title}</span>
+                          <span className="shrink-0 font-ui text-[10px] text-ink-soft">{a.date}</span>
+                        </div>
+                        <p className="mt-0.5 font-ui text-xs leading-relaxed text-ink-soft">{a.desc}</p>
+                      </div>
+                    ))}
+                    <div className="border-t border-light px-4 pb-1 pt-3 font-ui text-[11px] text-ink-soft">我的最近动态</div>
+                    {notifLoading && <p className="px-4 pb-3 font-ui text-xs text-ink-soft">加载中…</p>}
+                    {!notifLoading && notifs.length === 0 && (
+                      <p className="px-4 pb-3 font-ui text-xs text-ink-soft">暂无动态，去探索诗词吧</p>
+                    )}
+                    {notifs.map((n) => (
+                      <div key={n.id} className="flex items-start gap-2.5 px-4 py-2.5 transition-ink hover:bg-paper-dark">
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: n.color }} />
+                        <div className="min-w-0">
+                          <div className="font-ui text-[13px] text-ink-deep">
+                            <span className="text-ink-soft">{n.typeLabel} · </span>
+                            {n.title}
+                          </div>
+                          <p className="mt-0.5 font-ui text-[11px] text-ink-soft">{n.time}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>

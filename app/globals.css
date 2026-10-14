@@ -349,3 +349,13 @@ html.motion-off .anim-ink-spread,
 html.motion-off .anim-ink-reveal,
 html.motion-off .anim-ink-veil,
 html.motion-off .type-caret { animation: none; }
+
+/* ===== v2.5 系统首页 / 欢迎卡：古典水墨图景缓慢推移（Ken Burns） ===== */
+@keyframes inkPanZoom {
+  0% { transform: scale(1.1) translate3d(0, 0, 0); }
+  50% { transform: scale(1.18) translate3d(-1.8%, -1.4%, 0); }
+  100% { transform: scale(1.1) translate3d(0, 0, 0); }
+}
+.anim-ink-pan { animation: inkPanZoom 42s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .anim-ink-pan { animation: none; } }
+html.motion-off .anim-ink-pan { animation: none; }

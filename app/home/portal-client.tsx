@@ -133,16 +133,49 @@ export function PortalClient({ user, stats }: { user: PortalUser; stats: PortalS
       </header>
 
       <main className="mx-auto max-w-[1200px] px-6 pb-20 pt-24">
-        {/* ===== 欢迎区 ===== */}
-        <section className="anim-fade-up">
-          <h1 className="font-brush text-[40px] leading-tight text-ink-black md:text-[52px]">
-            {greeting()}，{name}
-          </h1>
-          <p className="mt-3 font-ui text-[15px] leading-relaxed text-ink-soft">
-            欢迎回到墨韵诗心 · AI 古诗词文化探索平台。这里汇聚 <span className="font-medium text-sepia">{numLabel(stats.totalPoems)}</span> 首全库诗篇，
-            从探索、注解到创作，选择一项功能开始你的诗词之旅。
-          </p>
+        {/* ===== 欢迎区：古典水墨图景（动态缓慢推移） ===== */}
+        <section className="anim-fade-up relative overflow-hidden rounded-2xl shadow-ink">
+          {/* 背景：水墨山水图 + 缓慢推移 + 墨色压暗遮罩（保证文字可读） */}
+          <div className="absolute inset-0" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/ink-hero.jpg" alt="" className="anim-ink-pan h-full w-full object-cover" />
+            <div
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(105deg, rgba(24,22,19,0.8) 0%, rgba(24,22,19,0.56) 44%, rgba(24,22,19,0.24) 100%)' }}
+            />
+            <div className="absolute inset-x-0 bottom-0 h-28" style={{ background: 'linear-gradient(to top, rgba(24,22,19,0.55), transparent)' }} />
+          </div>
+          <div className="relative z-10 px-7 py-10 md:px-12 md:py-14">
+            <span className="font-ui text-[11px] tracking-[0.42em]" style={{ color: 'rgba(245,242,236,0.62)' }}>墨 韵 诗 心</span>
+            <h1 className="mt-4 font-brush text-[36px] leading-tight md:text-[54px]" style={{ color: '#FAF8F3' }}>
+              {greeting()}，{name}
+            </h1>
+            <p className="mt-4 max-w-2xl font-serif text-[15px] leading-relaxed md:text-[16px]" style={{ color: 'rgba(245,242,236,0.88)' }}>
+              以墨为舟，溯千年诗心。平台汇聚 <span style={{ color: '#E8D9B5' }}>{numLabel(stats.totalPoems)}</span> 首中华诗篇，
+              以大语言模型与 RAG 检索增强，陪你读诗、解诗、作诗 —— 让千年文脉，在指尖重生。
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <Link
+                href="/workbench"
+                className="inline-flex items-center gap-2 rounded-lg px-5 py-3 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5"
+                style={{ background: '#FAF8F3', color: '#2C2C2C' }}
+              >
+                进入功能工作台 <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/workbench/annotate"
+                className="inline-flex items-center gap-2 rounded-lg px-5 py-3 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5"
+                style={{ border: '1px solid rgba(245,242,236,0.4)', color: '#FAF8F3' }}
+              >
+                <Sparkles className="h-4 w-4" /> 开始 AI 注解
+              </Link>
+            </div>
+            <p className="mt-7 font-serif text-[13px] tracking-wide" style={{ color: 'rgba(245,242,236,0.58)' }}>
+              「 行到水穷处 · 坐看云起时 」
+            </p>
+          </div>
         </section>
+
 
         {/* ===== 概览统计 ===== */}
         <section className="anim-fade-up mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4" style={{ animationDelay: '0.08s' }}>
@@ -152,22 +185,6 @@ export function PortalClient({ user, stats }: { user: PortalUser; stats: PortalS
               <div className="mt-2 font-ui text-xs text-ink-soft">{s.label}</div>
             </div>
           ))}
-        </section>
-
-        {/* ===== 进入工作台 CTA ===== */}
-        <section className="anim-fade-up mt-6" style={{ animationDelay: '0.12s' }}>
-          <Link
-            href="/workbench"
-            className="paper-card paper-card-hover flex items-center justify-between p-6 transition-ink"
-          >
-            <div>
-              <h2 className="font-brush text-2xl text-ink-black">进入功能工作台</h2>
-              <p className="mt-1 font-ui text-sm text-ink-soft">左侧边栏汇聚全部 17 项功能，随时切换</p>
-            </div>
-            <span className="inline-flex shrink-0 items-center gap-2 rounded-lg px-5 py-3 font-ui text-sm font-medium transition-ink" style={{ background: 'var(--btn-grad)', color: '#fff' }}>
-              进入工作台 <ArrowRight className="h-4 w-4" />
-            </span>
-          </Link>
         </section>
 
         {/* ===== 功能入口分组 ===== */}

@@ -1,11 +1,15 @@
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
-import { Landing } from '@/components/landing';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * 首页入口：打开即直达核心体验。
+ * 未登录 → 跳转登录/注册页；已登录 → 跳转工作台。
+ * （v2.5 移除落地页，首页不再渲染营销展示）
+ */
 export default async function HomePage() {
   const session = await auth();
-  const totalPoems = await prisma.poem.count();
-  return <Landing isLoggedIn={!!session?.user} userName={session?.user?.name ?? null} totalPoems={totalPoems} />;
+  if (session?.user) redirect('/workbench');
+  redirect('/login');
 }

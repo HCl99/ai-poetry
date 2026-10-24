@@ -2,8 +2,8 @@ import { prisma } from '@/lib/prisma';
 
 /**
  * MCP（Model Context Protocol）工具层 —— 对应 PRD 4.8 节。
- * 演示版：完成 2 个工具（search_poetry / get_annotation）的协议级定义与本地模拟调用，
- * 返回结构遵循 MCP content 协议；外部 Agent 客户端（Claude Desktop 等）真实联调属 V2 正式版。
+ * 2 个工具（search_poetry / get_annotation）均按 MCP tools/call 的 content 结构返回，
+ * 由 app/api/mcp/route.ts 以 JSON-RPC 2.0 暴露给站内面板与外部 Agent 客户端。
  */
 
 export interface McpToolDef {

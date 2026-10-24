@@ -5,6 +5,8 @@ import { topKSimilar } from '@/lib/vectorStore';
 import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { screenInput, createOutputGuard, SAFE_REPLY } from '@/lib/content-filter';
+import { checkMeter, summarizeMeter, meterFormFor, type MeterReport } from '@/lib/meter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -127,6 +129,9 @@ export async function POST(req: Request) {
   // 开流前的参数校验仍返回普通 JSON 错误，便于前端直接读取
   if (!text?.trim()) return Response.json({ error: '请输入现代文内容' }, { status: 400 });
   if (!style || !STYLES[style]) return Response.json({ error: '请选择风格' }, { status: 400 });
+
+  const screen = screenInput(text);
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const s = STYLES[style];
   const model = 'glm-4-flash';
@@ -262,18 +267,23 @@ ${hardRules}`;
             .map((l) => l.trim())
             .filter((l) => l && !(s.cipai && l.replace(/[《》〈〉〔〕·\s]/g, '').startsWith(s.cipai)));
         const targetShape = s.shape.join(',');
+        // 格律校验形式：诗按句数/句长区分（五绝/七绝/七律），词走 cipai 押韵分支
+        const meterForm = meterFormFor(s.shape, s.genre);
 
         let poem = '';
         let full = '';
+        let meterReport: MeterReport | null = null;
+        const guard = createOutputGuard();
+        // 上一轮未通过原因（体裁/格律），注入下一轮重写 prompt；首轮为空
+        let retryReason = '';
         for (let attempt = 1; attempt <= 4; attempt++) {
           const streamThis = attempt === 1; // 首轮流式（即时反馈），校验不过的重写走非流式
-          const prevSents = bodySents(poem);
           // 重写提示**不再回喂「上一次输出」**：实测 flash 看到旧稿会在其后原样续写/复读，
           // 反而越写越长；只告知失败原因并重申句式，让它独立重写。
           const user =
             attempt === 1
               ? prompt
-              : `${prompt}\n\n【重写要求】上一版写成 ${prevSents.length} 句（逐句字数 ${shapeOf(prevSents) || '—'}），不符合「${s.form} 应为 ${s.shape.length} 句、逐句字数依次 ${targetShape}」。请重新独立创作：严格写 ${s.shape.length} 句、每句单独成行、逐句字数严格对应上表；严禁重复任何一句、严禁照抄上一版。`;
+              : `${prompt}\n\n【重写要求】${retryReason}请重新独立创作：严格写 ${s.shape.length} 句、每句单独成行、逐句字数严格对应上表${s.genre === '词' ? '；韵脚按词牌押同一韵部' : '；偶数句末字押同一韵部且用平声、奇数句（首句除外）末字用仄声，注意第 2、4、6 字平仄交替'}；严禁重复任何一句、严禁照抄上一版。`;
           const resp: any = await client.chat.completions.create({
             model,
             messages: [
@@ -287,28 +297,56 @@ ${hardRules}`;
           } as any);
           if (streamThis) {
             full = '';
+            let blocked = false;
             for await (const chunk of resp as AsyncIterable<any>) {
               const d = chunk.choices?.[0]?.delta?.content || '';
               if (d) {
+                if (!guard.push(d)) {
+                  blocked = true;
+                  send('error', { message: SAFE_REPLY, error: SAFE_REPLY });
+                  break;
+                }
                 full += d;
                 send('delta', { text: d });
               }
             }
+            if (blocked) return;
           } else {
             full = resp.choices?.[0]?.message?.content || '';
           }
           poem = normalizePoem(clean(full), s);
-          // 判据：句数一致 且 逐句字数与目标句式完全一致
+          // 判据一（体裁硬校验）：句数一致 且 逐句字数与目标句式完全一致
           const cur = bodySents(poem);
-          if (cur.length === s.shape.length && shapeOf(cur) === targetShape) break;
-          if (attempt < 4) {
-            send('step', {
-              label: `体裁校验 · ${s.form} 需 ${s.shape.length} 句`,
-              detail: `首轮输出 ${cur.length} 句（字数 ${shapeOf(cur)}），正按词牌/格律重写…`,
-            });
+          const shapeOk = cur.length === s.shape.length && shapeOf(cur) === targetShape;
+          meterReport = null;
+          if (shapeOk) {
+            // 判据二（格律后校验，中华新韵）：押韵 + 平仄；首轮须待流式结束后才能判定
+            meterReport = checkMeter(cur, meterForm, s.cipai);
+            if (meterReport.pass) break;
+            retryReason = `上一版句数与字数已合规，但格律校验未通过（中华新韵）：${summarizeMeter(meterReport)}。`;
+            if (attempt < 4) {
+              send('step', {
+                label: `格律校验 · ${s.form} 押韵/平仄未过`,
+                detail: `${summarizeMeter(meterReport, 120)}，正按格律重写…`,
+              });
+            }
+          } else {
+            retryReason = `上一版写成 ${cur.length} 句（逐句字数 ${shapeOf(cur) || '—'}），不符合「${s.form} 应为 ${s.shape.length} 句、逐句字数依次 ${targetShape}」。`;
+            if (attempt < 4) {
+              send('step', {
+                label: `体裁校验 · ${s.form} 需 ${s.shape.length} 句`,
+                detail: `首轮输出 ${cur.length} 句（字数 ${shapeOf(cur)}），正按词牌/格律重写…`,
+              });
+            }
           }
         }
         if (!poem) throw new Error('empty output');
+        // 兜底：最终稿若未做过格律校验（如体裁校验 4 轮全败），按最终稿如实补算报告，
+        // meter 未过项如实标注（沿用「返回最后一稿」的既有兜底，不额外增加重写轮次）
+        if (!meterReport) {
+          const cur = bodySents(poem);
+          if (cur.length) meterReport = checkMeter(cur, meterForm, s.cipai);
+        }
 
         // 流结束后再一次性落库（创作记录 + 学习历史）
         let saved = false;
@@ -333,7 +371,20 @@ ${hardRules}`;
           saved = true;
         }
 
-        send('done', { poem, latencyMs: Date.now() - t0, saved });
+        // done 附带精简格律报告：pass/rhymeOk/pingzeOk + 每句违规描述（前端徽章展示用）
+        send('done', {
+          poem,
+          latencyMs: Date.now() - t0,
+          saved,
+          meter: meterReport
+            ? {
+                pass: meterReport.pass,
+                rhymeOk: meterReport.rhymeOk,
+                pingzeOk: meterReport.pingzeOk,
+                lines: meterReport.lines.map((l) => l.issues),
+              }
+            : null,
+        });
       } catch (e: any) {
         console.error('transfer stream error', e?.message || e);
         send('error', { error: 'AI生成失败，请重试' });

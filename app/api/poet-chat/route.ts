@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { screenInput } from '@/lib/content-filter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,11 @@ export async function POST(req: Request) {
     history?: { role: 'user' | 'assistant'; content: string }[];
   };
   if (!poet?.trim() || !message?.trim()) return Response.json({ error: '缺少 poet 或 message' }, { status: 400 });
+
+  const screen = screenInput(
+    [message, ...(history || []).filter((m) => m.role === 'user').map((m) => m.content || '')].join('\n'),
+  );
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const bio = await prisma.poetBio.findFirst({ where: { name: poet.trim() } });
   const works = await prisma.poem.findMany({

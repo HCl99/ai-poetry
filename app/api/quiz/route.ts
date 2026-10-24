@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { screenInput } from '@/lib/content-filter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -226,6 +227,9 @@ export async function PUT(req: Request) {
   if (!id) return Response.json({ error: '缺少题目 id' }, { status: 400 });
   const text = userAnswer?.trim();
   if (!text) return Response.json({ error: '请填写答案' }, { status: 400 });
+
+  const screen = screenInput(text);
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   let rid: bigint;
   try {

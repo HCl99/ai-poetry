@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, ChevronDown, Loader2, Plus, Send, Sparkles, Square, Trash2 } from 'lucide-react';
+import { Bot, Check, ChevronDown, Loader2, Plus, Send, Sparkles, Square, Trash2 } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { VoiceInputButton } from '@/components/voice-input-button';
 import { sseEvents } from '@/lib/sse';
 
 interface Related { id: string; title: string; author: string; dynasty: string; score: number | null }
@@ -26,6 +27,14 @@ const QUICK_ASKS = [
   '“明月”意象在唐诗中有哪些经典用法？',
   '帮我对比李白与杜甫的诗歌风格',
   '“春风又绿江南岸”的“绿”字好在哪里？',
+];
+
+/** Agent 工作流的四个阶段（与服务端 SSE step 事件一一对应） */
+const AGENT_PHASES = [
+  { key: 'understand', short: '理解', label: '理解问题' },
+  { key: 'retrieve', short: '检索', label: '检索诗词知识库' },
+  { key: 'rerank', short: '精排', label: 'CrossEncoder 精排' },
+  { key: 'generate', short: '生成', label: '组织回答' },
 ];
 
 function loadConversations(): Conversation[] {
@@ -247,27 +256,85 @@ export function AssistantView() {
               ) : (
                 <div key={i} className="flex justify-start">
                   <div className="max-w-[85%] space-y-2">
-                    {/* 检索过程 */}
-                    {(m.steps?.length || busy && i === messages.length - 1) && (
-                      <button
-                        onClick={() => setStepsOpen((s) => ({ ...s, [i]: !s[i] }))}
-                        className="flex items-center gap-1.5 font-ui text-[11px] text-ink-soft transition-ink hover:text-ink-mid"
-                      >
-                        {busy && i === messages.length - 1
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <ChevronDown className={`h-3 w-3 transition-transform ${stepsOpen[i] ? 'rotate-180' : ''}`} />}
-                        {m.steps?.length ? `检索链路 · ${m.steps[m.steps.length - 1].label}${m.steps[m.steps.length - 1].detail ? `：${m.steps[m.steps.length - 1].detail}` : ''}` : '思考中…'}
-                      </button>
-                    )}
-                    {stepsOpen[i] && m.steps && (
-                      <div className="space-y-1 rounded-lg p-3" style={{ background: 'var(--inset)' }}>
-                        {m.steps.map((s, j) => (
-                          <div key={j} className="font-ui text-[11px] text-ink-soft">
-                            <span style={{ color: '#6B8E7B' }}>✓</span> {s.label}{s.detail ? ` · ${s.detail}` : ''}
+                    {/* Agent 工作流：理解 → 检索 → 精排 → 生成，实时阶段状态 + 可展开调用轨迹 */}
+                    {(m.steps?.length || (busy && i === messages.length - 1)) && (() => {
+                      const streaming = busy && i === messages.length - 1;
+                      const labels = (m.steps || []).map((s) => s.label);
+                      const has = (re: RegExp) => labels.some((l) => re.test(l));
+                      const done = [
+                        labels.length > 0,
+                        has(/精排|检索完成/),
+                        has(/检索完成/),
+                        !streaming && !!m.content,
+                      ];
+                      const activeIdx = done.findIndex((d) => !d);
+                      const lastStep = m.steps?.[m.steps.length - 1];
+                      return (
+                        <div className="rounded-xl border border-light p-2.5" style={{ background: 'var(--inset)' }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-ui text-[10px] tracking-widest text-ink-soft">AGENT 工作流</span>
+                            <button
+                              onClick={() => setStepsOpen((s) => ({ ...s, [i]: !s[i] }))}
+                              className="flex items-center gap-1 font-ui text-[10px] text-ink-soft transition-ink hover:text-ink-mid"
+                              aria-expanded={!!stepsOpen[i]}
+                            >
+                              调用轨迹
+                              <ChevronDown className={`h-3 w-3 transition-transform ${stepsOpen[i] ? 'rotate-180' : ''}`} />
+                            </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
+
+                          <div className="mt-2 flex items-start">
+                            {AGENT_PHASES.map((p, j) => {
+                              // 精排阶段仅在真正走了 CrossEncoder 时才算完成，向量服务降级时标记为跳过
+                              const skipped = j === 2 && !has(/精排/) && has(/检索完成/);
+                              const state: 'done' | 'active' | 'idle' | 'skip' = skipped
+                                ? 'skip'
+                                : done[j]
+                                  ? 'done'
+                                  : j === activeIdx && streaming
+                                    ? 'active'
+                                    : 'idle';
+                              return (
+                                <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                                  <span
+                                    className="flex h-5 w-5 items-center justify-center rounded-full font-ui text-[10px] leading-none"
+                                    title={skipped ? `${p.label} · 本次未启用（关键词降级）` : p.label}
+                                    style={{
+                                      background: state === 'done' ? 'rgba(107,142,123,0.16)' : state === 'active' ? 'var(--btn-bg)' : 'transparent',
+                                      color: state === 'done' ? '#4E6E5D' : state === 'active' ? '#FFFFFF' : 'var(--ink-soft)',
+                                      border: state === 'idle' ? '1px dashed var(--border-c)' : '1px solid transparent',
+                                      opacity: state === 'skip' ? 0.45 : 1,
+                                    }}
+                                  >
+                                    {state === 'done' ? <Check className="h-3 w-3" /> : state === 'active' ? <Loader2 className="h-3 w-3 animate-spin" /> : state === 'skip' ? '–' : j + 1}
+                                  </span>
+                                  <span className="truncate font-ui text-[10px] text-ink-soft">{p.short}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {lastStep && (
+                            <p className="mt-2 truncate font-ui text-[10px] text-ink-soft">
+                              {streaming ? '正在：' : '末步：'}{lastStep.label}{lastStep.detail ? ` · ${lastStep.detail}` : ''}
+                            </p>
+                          )}
+
+                          {stepsOpen[i] && m.steps && (
+                            <div className="mt-2 space-y-1 border-t border-light pt-2">
+                              {m.steps.map((s, j) => (
+                                <div key={j} className="flex gap-1.5 font-ui text-[10px] leading-relaxed text-ink-soft">
+                                  <span className="shrink-0 font-mono opacity-60">{String(j + 1).padStart(2, '0')}</span>
+                                  <span className="min-w-0 break-words">
+                                    {s.label}{s.detail ? ` · ${s.detail}` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* 回答正文 */}
                     {m.content && (
                       <div className="rounded-2xl rounded-bl-md px-4 py-3 font-ui text-sm leading-relaxed text-ink-deep" style={{ background: 'var(--inset)', whiteSpace: 'pre-line' }}>
@@ -308,6 +375,7 @@ export function AssistantView() {
         {/* 输入区 */}
         <div className="border-t border-light p-4">
           <div className="flex items-end gap-2">
+            <VoiceInputButton onText={(t) => setInput((prev) => (prev ? `${prev}${t}` : t))} />
             <textarea
               className="max-h-28 min-h-[42px] flex-1 resize-none rounded-xl border border-c bg-white/70 px-4 py-2.5 font-ui text-sm leading-relaxed text-ink-deep outline-none transition-ink focus:border-ink-mid"
               placeholder="输入关于古诗词的问题，Enter 发送…"

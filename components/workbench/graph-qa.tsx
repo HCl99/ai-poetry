@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, MessageCircleQuestion, Send, Square, Database, Bot, ShieldCheck } from 'lucide-react';
 import { sseEvents } from '@/lib/sse';
+import { VoiceInputButton } from '@/components/voice-input-button';
 
 const KIND_META = {
   poet: {
@@ -191,6 +192,7 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
 
           {/* 输入行 */}
           <div className="flex items-center gap-2">
+            <VoiceInputButton size="sm" onText={(t) => setInput((prev) => (prev ? `${prev}${t}` : t))} />
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}

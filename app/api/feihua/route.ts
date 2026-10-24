@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { screenInput } from '@/lib/content-filter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
   const { char, played, playerLine } = (await req.json()) as { char?: string; played?: string[]; playerLine?: string };
   if (!char || !/^[\u4e00-\u9fa5]$/.test(char)) return Response.json({ error: '令字必须是单个汉字' }, { status: 400 });
   if (!playerLine?.trim()) return Response.json({ error: '请输入诗句' }, { status: 400 });
+
+  const screen = screenInput(playerLine);
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const used = (played || []).map(strip);
   const norm = strip(playerLine);

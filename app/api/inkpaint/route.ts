@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { screenInput } from '@/lib/content-filter';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -13,6 +14,9 @@ export async function POST(req: Request) {
 
   const { prompt } = (await req.json()) as { prompt?: string };
   if (!prompt?.trim()) return Response.json({ error: '缺少 prompt' }, { status: 400 });
+
+  const screen = screenInput(prompt);
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const base = (process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4').replace(/\/$/, '');
   const r = await fetch(`${base}/images/generations`, {

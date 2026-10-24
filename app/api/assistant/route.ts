@@ -5,6 +5,7 @@ import { hybridCoarse, vectorCorpusSize } from '@/lib/vectorStore';
 import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
+import { screenInput, createOutputGuard, SAFE_REPLY } from '@/lib/content-filter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,11 @@ export async function POST(req: Request) {
   };
   const q = message?.trim().slice(0, 200);
   if (!q) return Response.json({ error: '请输入问题' }, { status: 400 });
+
+  const screen = screenInput(
+    [q, ...(history || []).filter((m) => m.role === 'user').map((m) => m.content || '')].join('\n'),
+  );
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const t0 = Date.now();
   const stream = new ReadableStream({
@@ -129,9 +135,14 @@ ${relatedCtx ? `【知识库检索结果（回答依据）】\n${relatedCtx}\n${
         });
 
         let full = '';
+        const guard = createOutputGuard();
         for await (const chunk of resp) {
           const delta = chunk.choices?.[0]?.delta?.content || '';
           if (delta) {
+            if (!guard.push(delta)) {
+              send('error', { message: SAFE_REPLY, error: SAFE_REPLY });
+              return;
+            }
             full += delta;
             send('delta', { text: delta });
           }

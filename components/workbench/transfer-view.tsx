@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Download, Volume2, Square, Image as ImageIcon, Share2, ScrollText } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { useSpeech } from '@/lib/use-speech';
+import { AiBadge } from '@/components/ai-badge';
 import { sseEvents } from '@/lib/sse';
 import { ShareCard, downloadSharePng } from './share-card';
 import { ScrollCard } from './scroll-card';
@@ -22,6 +23,8 @@ const EXAMPLE = '下雨天一个人走回家，路上想起了远方的朋友';
 
 interface Meta { style: string; form: string; model: string; exemplars?: { title: string; score: number }[] }
 interface DoneInfo { latencyMs: number; saved: boolean }
+/** 格律后校验报告（done 事件精简版）：pass/rhymeOk/pingzeOk + 每句违规描述 */
+interface MeterInfo { pass: boolean; rhymeOk: boolean; pingzeOk: boolean; lines: string[][] }
 
 export function TransferView() {
   const [style, setStyle] = useState('sushi');
@@ -31,6 +34,7 @@ export function TransferView() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [stepText, setStepText] = useState('');
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
+  const [meter, setMeter] = useState<MeterInfo | null>(null);
   const [error, setError] = useState('');
   const speech = useSpeech();
   const [inkUrl, setInkUrl] = useState('');
@@ -105,6 +109,7 @@ export function TransferView() {
     setPoem('');
     setMeta(null);
     setDoneInfo(null);
+    setMeter(null);
     setStepText('');
     setInkUrl('');
     setInkError(false);
@@ -130,6 +135,7 @@ export function TransferView() {
         else if (event === 'done') {
           setPoem(data.poem || '');
           setDoneInfo({ latencyMs: data.latencyMs, saved: !!data.saved });
+          setMeter(data.meter || null);
           show('风格迁移完成');
         }
       }
@@ -324,7 +330,9 @@ export function TransferView() {
 
         {/* 右栏：生成结果（流式逐字） */}
         <div className="paper-card flex min-h-[420px] flex-col p-6">
-          <h2 className="mb-4 font-ui text-[15px] font-medium text-ink-deep">生成结果</h2>
+          <h2 className="mb-4 flex items-center gap-2 font-ui text-[15px] font-medium text-ink-deep">
+            生成结果 {hasOutput && <AiBadge label="AI 生成 · 仅供参考" />}
+          </h2>
 
           {loading && !hasOutput && (
             <div className="flex flex-1 flex-col items-center justify-center py-16">
@@ -350,8 +358,31 @@ export function TransferView() {
                   {loading && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
                 </p>
               </div>
-              <div className="mt-4 flex items-center justify-between font-ui text-xs text-ink-soft">
-                <span>{meta?.style ?? ''} · {meta?.form ?? '古诗词'}</span>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 font-ui text-xs text-ink-soft">
+                <span className="inline-flex items-center gap-1.5">
+                  {meta?.style ?? ''} · {meta?.form ?? '古诗词'}
+                  {/* 格律后校验徽章：全过 ✓（sage 绿），未全过 ⚠（rose）并附 title 明细 */}
+                  {doneInfo && meter && (
+                    <span
+                      className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-ui text-[11px]"
+                      style={
+                        meter.pass
+                          ? { color: 'var(--sage)', border: '1px solid color-mix(in srgb, var(--sage) 45%, transparent)', background: 'color-mix(in srgb, var(--sage) 12%, transparent)' }
+                          : { color: 'var(--rose)', border: '1px solid color-mix(in srgb, var(--rose) 45%, transparent)', background: 'color-mix(in srgb, var(--rose) 10%, transparent)' }
+                      }
+                      title={
+                        meter.pass
+                          ? '中华新韵格律校验通过：押韵与平仄合规（一三五不论 · 首句入韵宽容）'
+                          : [
+                              `格律校验（中华新韵）：押韵${meter.rhymeOk ? '✓' : '✗'} · 平仄${meter.pingzeOk ? '✓' : '✗'}`,
+                              ...meter.lines.flatMap((issues, i) => issues.map((x) => `第${i + 1}句：${x}`)),
+                            ].join('\n')
+                      }
+                    >
+                      {meter.pass ? '✓ 格律校验' : '⚠ 格律存疑'}
+                    </span>
+                  )}
+                </span>
                 {doneInfo ? (
                   <span>{meta?.model ?? 'glm-4-flash'} · {(doneInfo.latencyMs / 1000).toFixed(1)}s · {doneInfo.saved ? '已存入我的创作' : '未登录，未保存'}</span>
                 ) : (
@@ -372,7 +403,7 @@ export function TransferView() {
                 </div>
               )}
               {doneInfo && (
-                <div className="mt-3 flex justify-end gap-2">
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
                   <button
                     onClick={speak}
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"

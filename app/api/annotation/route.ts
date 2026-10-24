@@ -7,6 +7,7 @@ import { detectImageryChars } from '@/lib/imageryDetect';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
+import { screenInput, createOutputGuard, SAFE_REPLY } from '@/lib/content-filter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,11 @@ export async function POST(req: Request) {
     history?: { role: 'user' | 'assistant'; content: string }[];
   };
   if (!poemId) return Response.json({ error: '缺少 poemId' }, { status: 400 });
+
+  const screen = screenInput(
+    [question || '', ...(history || []).filter((m) => m.role === 'user').map((m) => m.content || '')].join('\n'),
+  );
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const poem = await prisma.poem.findUnique({
     where: { id: poemId },
@@ -146,9 +152,14 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `相似诗篇：\n${
           });
 
           let full = '';
+          const guard = createOutputGuard();
           for await (const chunk of resp) {
             const delta = chunk.choices?.[0]?.delta?.content || '';
             if (delta) {
+              if (!guard.push(delta)) {
+                send('error', { message: SAFE_REPLY, error: SAFE_REPLY });
+                return;
+              }
               full += delta;
               send('delta', { text: delta });
             }
@@ -347,9 +358,14 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
         });
 
         let full = '';
+        const guard = createOutputGuard();
         for await (const chunk of resp) {
           const delta = chunk.choices?.[0]?.delta?.content || '';
           if (delta) {
+            if (!guard.push(delta)) {
+              send('error', { message: SAFE_REPLY, error: SAFE_REPLY });
+              return;
+            }
             full += delta;
             send('delta', { text: delta });
           }

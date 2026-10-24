@@ -3,6 +3,7 @@ import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { AGENT_TOOLS, executeAgentTool } from '@/lib/agentTools';
 import { checkCitations } from '@/lib/citationCheck';
+import { screenInput } from '@/lib/content-filter';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   const { kind, question } = (await req.json()) as { kind?: 'poet' | 'imagery'; question?: string };
   if (!question?.trim()) return Response.json({ error: '缺少 question' }, { status: 400 });
   if (kind !== 'poet' && kind !== 'imagery') return Response.json({ error: 'kind 必须是 poet 或 imagery' }, { status: 400 });
+
+  const screen = screenInput(question);
+  if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const q = question.trim().slice(0, 100);
   const t0 = Date.now();

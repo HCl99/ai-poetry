@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare, Palette } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { useSpeech } from '@/lib/use-speech';
+import { AiBadge } from '@/components/ai-badge';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
 import { ShareCard, downloadSharePng } from './share-card';
@@ -596,7 +597,7 @@ export function AnnotateView() {
               {stream && (
                 <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>
                   <span className={`h-1.5 w-1.5 rounded-full ${loading ? 'animate-pulse' : ''}`} style={{ background: '#6B8E7B' }} />
-                  {stream.phase === 'retrieve' ? '向量检索中' : stream.phase === 'generate' ? 'AI 撰写中' : '引用可追溯'}
+                  {stream.phase === 'retrieve' ? '向量检索中' : stream.phase === 'generate' ? 'AI 撰写中' : 'AI 生成 · 引用可追溯'}
                 </span>
               )}
             </div>
@@ -775,6 +776,7 @@ export function AnnotateView() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
                         <Palette className="h-3.5 w-3.5 text-sepia" /> 水墨意境配图 · 由 AI 注解识别意象驱动
+                        <AiBadge className="ml-1" label="AI 绘图" />
                       </div>
                       {inkUrl && !inkLoading && (
                         <button onClick={() => genInk()} className="font-ui text-xs text-muted-blue transition-ink hover:underline">重新生成</button>

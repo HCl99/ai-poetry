@@ -21,7 +21,9 @@ import requests
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMBED_URL = "http://127.0.0.1:8100"
 LLM_MODEL = "glm-4-flash"
-N_SAMPLES = 5
+# 每组样本数：随机组 + 冷门诗人组，总量 = 2 × N_SAMPLES（默认 25 → 50 题评测集）
+# 可用环境变量 AB_N 覆盖做小样本冒烟：AB_N=3 python scripts/rag_ab_test.py
+N_SAMPLES = int(os.environ.get("AB_N", "25"))
 SEED = 42
 
 # 常见典籍/总集白名单：非单篇诗题，视为真实引用而非幻觉

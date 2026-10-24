@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, Trash2, XCircle } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { PageHead, AdminTable, Tr, Td, Badge, Pagination, Empty, Modal, textareaCls, primaryBtn } from '@/components/admin/ui';
 import { POST_STATUS_LABEL } from '@/lib/community';
 
@@ -27,6 +28,7 @@ export default function AdminPostsPage() {
   const [note, setNote] = useState('');
   const [detail, setDetail] = useState<PostRow | null>(null);
   const { msg, show } = useToast();
+  const confirm = useConfirm();
   const size = 10;
 
   const load = useCallback(async (p = page, s = status) => {
@@ -43,7 +45,13 @@ export default function AdminPostsPage() {
 
   async function act(p: PostRow, action: 'approve' | 'reject' | 'delete', reviewNote?: string) {
     const label = action === 'approve' ? '通过' : action === 'reject' ? '拒绝' : '删除';
-    if (!confirm(`确定要${label}《${p.title}》吗？`)) return;
+    const ok = await confirm({
+      title: `${label}帖子`,
+      message: `确定要${label}《${p.title}》吗？`,
+      confirmText: `确认${label}`,
+      danger: action === 'delete',
+    });
+    if (!ok) return;
     setBusy(p.id);
     try {
       const res = await fetch('/api/admin/posts', {
@@ -164,6 +172,7 @@ export default function AdminPostsPage() {
           </div>
         </div>
       </Modal>
+      {confirm.dialog}
       <Toast msg={msg} />
     </div>
   );

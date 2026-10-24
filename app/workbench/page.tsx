@@ -45,6 +45,10 @@ function prettyQuery(raw: string | null): string {
   }
 }
 
+/** 语义色轻着色 / 明暗主题下可读的同色系文字（与 --ink-deep 混合，暗色自动提亮） */
+const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
+const readable = (c: string) => `color-mix(in srgb, ${c} 70%, var(--ink-deep))`;
+
 export default async function DashboardPage() {
   const session = await auth();
   const uid = session!.user.id!;
@@ -103,18 +107,18 @@ export default async function DashboardPage() {
       <HeroCarousel>
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-brush text-3xl text-paper-light md:text-4xl">{greeting()}，{name}</h1>
-            <p className="mt-2 font-ui text-sm" style={{ color: 'rgba(245,242,236,0.75)' }}>
+            <h1 className="font-brush text-3xl text-on-image md:text-4xl">{greeting()}，{name}</h1>
+            <p className="mt-2 font-ui text-sm" style={{ color: 'color-mix(in srgb, var(--on-image) 75%, transparent)' }}>
               最近活动 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
             </p>
             {dailyPoem && (
-              <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'rgba(245,242,236,0.12)' }}>
-                <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.3)', color: '#F5F2EC' }}>每日一诗</span>
+              <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'color-mix(in srgb, var(--on-image) 12%, transparent)' }}>
+                <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'color-mix(in srgb, var(--gold-wash) 30%, transparent)', color: 'var(--on-image)' }}>每日一诗</span>
                 <div>
-                  <p className="font-serif text-sm leading-relaxed text-paper-light">
+                  <p className="font-serif text-sm leading-relaxed text-on-image">
                     {dailyLines.join(' ')}
                   </p>
-                  <p className="mt-1 font-ui text-xs" style={{ color: 'rgba(245,242,236,0.6)' }}>
+                  <p className="mt-1 font-ui text-xs" style={{ color: 'color-mix(in srgb, var(--on-image) 60%, transparent)' }}>
                     〔{dailyPoem.dynasty}〕{dailyPoem.author}《{dailyPoem.title}》 · 按日期轮换，当日全站同一首
                   </p>
                 </div>
@@ -130,14 +134,14 @@ export default async function DashboardPage() {
       {/* 统计卡片（进场递增浮现） */}
       <section className="anim-fade-up grid grid-cols-2 gap-4 lg:grid-cols-4" style={{ animationDelay: '0.08s' }}>
         {[
-          { icon: <BookOpen className="h-5 w-5" />, label: '研习诗词', value: `${readCount}`, trend: readCount ? '注解 · 收藏' : '开始探索', c: '#7B8EA1' },
-          { icon: <Sparkles className="h-5 w-5" />, label: 'AI注解', value: `${annotateCount}`, trend: annotateCount ? '持续生成中' : '开始体验', c: '#6B8E7B' },
-          { icon: <Edit className="h-5 w-5" />, label: '风格创作', value: `${creationCount}`, trend: creationCount ? '灵感迸发' : '去创作一首', c: '#8B7355' },
-          { icon: <Star className="h-5 w-5" />, label: '我的收藏', value: `${favCount}`, trend: favCount ? '书藏万卷' : '发现美诗', c: '#A67C7C' },
+          { icon: <BookOpen className="h-5 w-5" />, label: '研习诗词', value: `${readCount}`, trend: readCount ? '注解 · 收藏' : '开始探索', c: 'var(--muted-blue)' },
+          { icon: <Sparkles className="h-5 w-5" />, label: 'AI注解', value: `${annotateCount}`, trend: annotateCount ? '持续生成中' : '开始体验', c: 'var(--sage)' },
+          { icon: <Edit className="h-5 w-5" />, label: '风格创作', value: `${creationCount}`, trend: creationCount ? '灵感迸发' : '去创作一首', c: 'var(--sepia)' },
+          { icon: <Star className="h-5 w-5" />, label: '我的收藏', value: `${favCount}`, trend: favCount ? '书藏万卷' : '发现美诗', c: 'var(--rose)' },
         ].map((s) => (
           <div key={s.label} className="paper-card paper-card-hover p-5">
             <div className="flex items-center justify-between">
-              <span className="rounded-lg p-2" style={{ background: `${s.c}1f`, color: s.c }}>{s.icon}</span>
+              <span className="rounded-lg p-2" style={{ background: tint(s.c, 12), color: readable(s.c) }}>{s.icon}</span>
               <span className="font-ui text-xs text-ink-soft">{s.trend}</span>
             </div>
             <div className="mt-3 font-brush text-[32px] leading-none text-ink-deep">{s.value}</div>
@@ -156,17 +160,17 @@ export default async function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
-            { label: '启蒙诵读', desc: '背诵闯关 · 研习 10 首经典', done: Math.min(readCount, 10), total: 10, c: '#7B8EA1', href: '/workbench/recite' },
-            { label: 'AI 精读', desc: '完成 5 首 AI 深度注解', done: Math.min(annotateDistinct, 5), total: 5, c: '#6B8E7B', href: '/workbench/annotate' },
-            { label: '提笔创作', desc: '完成 3 首风格迁移创作', done: Math.min(creationCount, 3), total: 3, c: '#A67C7C', href: '/workbench/transfer' },
+            { label: '启蒙诵读', desc: '背诵闯关 · 研习 10 首经典', done: Math.min(readCount, 10), total: 10, c: 'var(--muted-blue)', href: '/workbench/recite' },
+            { label: 'AI 精读', desc: '完成 5 首 AI 深度注解', done: Math.min(annotateDistinct, 5), total: 5, c: 'var(--sage)', href: '/workbench/annotate' },
+            { label: '提笔创作', desc: '完成 3 首风格迁移创作', done: Math.min(creationCount, 3), total: 3, c: 'var(--rose)', href: '/workbench/transfer' },
           ].map((s, i) => {
             const pct = Math.round((s.done / s.total) * 100);
             const status = pct >= 100 ? '已达成' : s.done > 0 ? '进行中' : '待开始';
             return (
               <Link key={s.label} href={s.href} className="rounded-lg p-4 transition-ink hover:-translate-y-0.5" style={{ background: 'var(--inset)' }}>
                 <div className="flex items-center justify-between">
-                  <span className="font-ui text-sm font-medium" style={{ color: s.c }}>第{'一二三'[i]}步 · {s.label}</span>
-                  <span className="rounded-full px-2 py-0.5 font-ui text-[10px]" style={{ background: `${s.c}1f`, color: s.c }}>{status}</span>
+                  <span className="font-ui text-sm font-medium" style={{ color: readable(s.c) }}>第{'一二三'[i]}步 · {s.label}</span>
+                  <span className="rounded-full px-2 py-0.5 font-ui text-[10px]" style={{ background: tint(s.c, 12), color: readable(s.c) }}>{status}</span>
                 </div>
                 <p className="mt-1.5 font-ui text-xs text-ink-soft">{s.desc}</p>
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--paper-dark)' }}>
@@ -180,7 +184,7 @@ export default async function DashboardPage() {
         {nextPoem && (
           <div className="mt-5 flex flex-col gap-3 rounded-lg p-4 md:flex-row md:items-center md:justify-between" style={{ border: '1px dashed var(--border-c)', background: 'var(--paper-dark)' }}>
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="rounded-md px-2 py-1 font-ui text-[10px]" style={{ background: 'rgba(196,169,101,0.2)', color: '#8B7355' }}>下一首推荐</span>
+              <span className="rounded-md px-2 py-1 font-ui text-[10px]" style={{ background: 'color-mix(in srgb, var(--gold-wash) 20%, transparent)', color: readable('var(--sepia)') }}>下一首推荐</span>
               <span className="font-serif text-sm text-ink-deep">《{nextPoem.title}》</span>
               <span className="font-ui text-xs text-ink-soft">〔{nextPoem.dynasty}〕{nextPoem.author} · 你还未读过</span>
             </div>
@@ -207,7 +211,7 @@ export default async function DashboardPage() {
               </p>
             </div>
             <div className="space-y-3">
-              <div className="rounded-lg p-3.5" style={{ borderLeft: '3px solid #8B7355', background: 'var(--inset)' }}>
+              <div className="rounded-lg p-3.5" style={{ borderLeft: '3px solid var(--sepia)', background: 'var(--inset)' }}>
                 <div className="mb-1 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
                   <Sparkles className="h-3.5 w-3.5 text-sepia" /> 字词释义
                 </div>
@@ -215,7 +219,7 @@ export default async function DashboardPage() {
                   {(previewAnnotation.annotations?.fanyi || '暂无注解').slice(0, 80)}…
                 </p>
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-ui text-xs" style={{ border: '1px dashed #7B8EA1', color: '#7B8EA1', background: 'rgba(123,142,161,0.06)' }}>
+              <div className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-ui text-xs" style={{ border: '1px dashed var(--muted-blue)', color: readable('var(--muted-blue)'), background: tint('var(--muted-blue)', 6) }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
                 知识库 · 意象检索
               </div>
@@ -234,7 +238,7 @@ export default async function DashboardPage() {
           <div className="space-y-1">
             {recent.map((h) => (
               <div key={h.id.toString()} className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-ink hover:bg-paper-dark/60">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: '#7B8EA1' }} />
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--muted-blue)' }} />
                 <span className="flex-1 truncate font-ui text-sm text-ink-mid">{h.title}</span>
                 <span className="font-ui text-xs text-ink-soft">
                   {h.createdAt.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -265,7 +269,7 @@ export default async function DashboardPage() {
         <div className="paper-card p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-ui text-[15px] font-medium text-ink-deep">AI 注解记录</h2>
-            <span className="inline-flex items-center gap-1.5 font-ui text-xs" style={{ color: '#6B8E7B' }}>
+            <span className="inline-flex items-center gap-1.5 font-ui text-xs" style={{ color: readable('var(--sage)') }}>
               <span className="pulse-dot" /> 运行正常
             </span>
           </div>
@@ -276,7 +280,7 @@ export default async function DashboardPage() {
             <span className="absolute left-[6px] top-1 h-[calc(100%-8px)] w-px" style={{ background: 'var(--border-light)' }} />
             {agentLogs.map((l) => (
               <div key={l.id.toString()} className="relative">
-                <span className="absolute -left-5 top-1 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
+                <span className="absolute -left-5 top-1 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: 'var(--sage)' }} />
                 <div className="font-ui text-sm text-ink-deep">{prettyQuery(l.userQuery)}</div>
                 <p className="mt-0.5 font-ui text-xs text-ink-soft">
                   glm-4-flash · 知识库检索 {(l.retrievedChunks as string[] | null)?.length ?? 0} 篇 · {l.latencyMs ?? 0}ms

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { ExploreGrid } from '@/components/workbench/explore-grid';
 
@@ -61,15 +62,15 @@ export default async function ExplorePage({
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 font-ui">
           {page > 1 && (
-            <a href={qs(page - 1)} className="rounded-lg border-[1.5px] border-c px-4 py-2 text-sm text-ink-mid transition-ink hover:bg-paper-dark">
+            <Link href={qs(page - 1)} prefetch className="rounded-lg border-[1.5px] border-c px-4 py-2 text-sm text-ink-mid transition-ink hover:bg-paper-dark">
               上一页
-            </a>
+            </Link>
           )}
           <span className="text-sm text-ink-soft">{page} / {Math.min(totalPages, 9999)}</span>
           {page < totalPages && (
-            <a href={qs(page + 1)} className="rounded-lg border-[1.5px] border-c px-4 py-2 text-sm text-ink-mid transition-ink hover:bg-paper-dark">
+            <Link href={qs(page + 1)} prefetch className="rounded-lg border-[1.5px] border-c px-4 py-2 text-sm text-ink-mid transition-ink hover:bg-paper-dark">
               下一页
-            </a>
+            </Link>
           )}
         </div>
       )}

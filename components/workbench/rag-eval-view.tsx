@@ -154,7 +154,7 @@ export function RagEvalView() {
                   <span className="w-5 shrink-0 font-ui text-xs text-ink-soft">{m.i + 1}</span>
                   <span className="font-serif text-sm text-ink-deep">《{m.title}》</span>
                   <span className="font-ui text-xs text-ink-soft">〔{m.dynasty}〕{m.author}</span>
-                  <span className="ml-auto flex items-center gap-2 font-ui text-xs">
+                  <span className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 font-ui text-xs">
                     {!r ? (
                       <span className="inline-flex items-center gap-1 text-ink-soft"><Loader2 className="h-3 w-3 animate-spin" /> 排队中</span>
                     ) : r.error ? (
@@ -166,7 +166,7 @@ export function RagEvalView() {
                             <CheckCircle2 className="h-3.5 w-3.5" /> 引用合规 {r.valid}/{r.cites}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1" style={{ color: '#A67C7C' }}>
+                          <span className="inline-flex flex-wrap items-center gap-1 break-words" style={{ color: '#A67C7C' }}>
                             <XCircle className="h-3.5 w-3.5" /> 越界 {[...new Set(r.invalid)].map((t) => `《${t}》`).join('、')}
                           </span>
                         )}

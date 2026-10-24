@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { PageHead, AdminTable, Tr, Td, Badge, Pagination, Empty, inputCls } from '@/components/admin/ui';
 
 interface UserRow {
@@ -17,6 +18,7 @@ export default function AdminUsersPage() {
   const [data, setData] = useState<{ items: UserRow[]; total: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const { msg, show } = useToast();
+  const confirm = useConfirm();
   const size = 10;
 
   const load = useCallback(async (p = page, query = q, r = role) => {
@@ -36,7 +38,13 @@ export default function AdminUsersPage() {
 
   async function act(u: UserRow, payload: { role?: string; status?: string }) {
     const verb = payload.role ? (payload.role === 'admin' ? '设为管理员' : '设为普通用户') : (payload.status === 'disabled' ? '禁用' : '启用');
-    if (!confirm(`确定要${verb}「${u.name || u.email}」吗？${payload.status === 'disabled' ? '禁用后该账号将立即无法登录。' : ''}`)) return;
+    const ok = await confirm({
+      title: '确认用户操作',
+      message: `确定要${verb}「${u.name || u.email}」吗？${payload.status === 'disabled' ? '禁用后该账号将立即无法登录。' : ''}`,
+      confirmText: `确认${verb}`,
+      danger: payload.status === 'disabled',
+    });
+    if (!ok) return;
     setBusy(u.id);
     try {
       const res = await fetch('/api/admin/users', {
@@ -122,6 +130,7 @@ export default function AdminUsersPage() {
           <Pagination page={page} size={size} total={data.total} onPage={(p) => { setPage(p); load(p); }} />
         </div>
       )}
+      {confirm.dialog}
       <Toast msg={msg} />
     </div>
   );

@@ -125,20 +125,22 @@ export default async function StatsPage() {
         <div className="paper-card p-6">
           <h2 className="mb-1 font-ui text-[15px] font-medium text-ink-deep">检索热力 · 近 14 天</h2>
           <p className="mb-5 font-ui text-xs text-ink-soft">AI 注解与追问请求次数 · 累计 {logCount.toLocaleString()} 次 · {activeDays}/14 天有调用</p>
-          <div className="flex h-40 items-end gap-1.5">
-            {days.map((d) => (
-              <div key={d.label} className="group flex min-w-0 flex-1 flex-col items-center gap-1.5" title={`${d.label}：${d.count} 次`}>
-                <span className="font-ui text-[10px] text-ink-soft">{d.count || ''}</span>
-                <div
-                  className="w-full rounded-t-md transition-ink"
-                  style={{
-                    height: `${Math.max((d.count / maxDay) * 100, 2)}%`,
-                    background: d.count ? 'linear-gradient(180deg,#7B8EA1,#A8B8C6)' : 'var(--inset)',
-                  }}
-                />
-                <span className="font-ui text-[10px] text-ink-soft">{d.label}</span>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <div className="flex h-40 min-w-[480px] items-end gap-1.5">
+              {days.map((d) => (
+                <div key={d.label} className="group flex min-w-0 flex-1 flex-col items-center gap-1.5" title={`${d.label}：${d.count} 次`}>
+                  <span className="font-ui text-[10px] text-ink-soft">{d.count || ''}</span>
+                  <div
+                    className="w-full rounded-t-md transition-ink"
+                    style={{
+                      height: `${Math.max((d.count / maxDay) * 100, 2)}%`,
+                      background: d.count ? 'linear-gradient(180deg,#7B8EA1,#A8B8C6)' : 'var(--inset)',
+                    }}
+                  />
+                  <span className="font-ui text-[10px] text-ink-soft">{d.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

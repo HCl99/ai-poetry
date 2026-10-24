@@ -22,6 +22,8 @@
   /* 边框与阴影 */
   --border-c: #D4CFC5;
   --border-light: #E5DFD4;
+  /* 图片/深色遮罩上的文字色（不随主题翻转，保证对比度） */
+  --on-image: #F5F2EC;
   --shadow: 0 2px 24px rgba(60, 50, 40, 0.06);
   --shadow-hover: 0 8px 40px rgba(60, 50, 40, 0.12);
   /* 主题可变 token */
@@ -157,10 +159,12 @@
   .border-paper-light { border-color: var(--paper-light); }
   .border-c { border-color: var(--border-c); }
   .border-light { border-color: var(--border-light); }
+  .border-rose-c { border-color: #A67C7C; }
   .border-ink-deep { border-color: var(--ink-deep); }
   .focus\:border-ink-deep:focus { border-color: var(--ink-deep); }
   .focus\:border-ink-mid:focus { border-color: var(--ink-mid); }
   .text-paper-light { color: var(--paper-light); }
+  .text-on-image { color: var(--on-image); }
   .text-ink-soft\/70 { color: color-mix(in srgb, var(--ink-soft) 70%, transparent); }
   .text-ink-soft\/80 { color: color-mix(in srgb, var(--ink-soft) 80%, transparent); }
   .text-ink-soft\/50 { color: color-mix(in srgb, var(--ink-soft) 50%, transparent); }
@@ -359,3 +363,74 @@ html.motion-off .type-caret { animation: none; }
 .anim-ink-pan { animation: inkPanZoom 42s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .anim-ink-pan { animation: none; } }
 html.motion-off .anim-ink-pan { animation: none; }
+
+/* ===== v2.7 登录/注册页交互增强 ===== */
+/* 失败反馈：卡片轻摇 */
+@keyframes authShake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-9px); }
+  38% { transform: translateX(7px); }
+  58% { transform: translateX(-5px); }
+  78% { transform: translateX(3px); }
+}
+.anim-shake { animation: authShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+/* 登录/注册切换：卡片侧滑淡入（品牌区由共享 layout 保持挂载不动） */
+@keyframes authSwapIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.anim-auth-swap { animation: authSwapIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* 昼夜意境：InkBackdrop 按本地时段切换色调（SSR 默认 day，挂载后校正，1.6s 平滑过渡） */
+.ink-moon {
+  background: radial-gradient(circle, rgba(196, 169, 101, 0.5) 0%, rgba(196, 169, 101, 0.2) 55%, rgba(196, 169, 101, 0) 100%);
+  transition: background 1.6s ease, opacity 1.6s ease;
+}
+.ink-tint { transition: background 1.6s ease; }
+.ink-phase-day .ink-moon { opacity: 0.5; }
+.ink-phase-day .ink-tint { background: transparent; }
+.ink-phase-dawn .ink-moon {
+  background: radial-gradient(circle, rgba(216, 180, 102, 0.62) 0%, rgba(196, 169, 101, 0.26) 55%, rgba(196, 169, 101, 0) 100%);
+}
+.ink-phase-dawn .ink-tint {
+  background: linear-gradient(180deg, rgba(196, 169, 101, 0.12) 0%, rgba(196, 169, 101, 0.04) 55%, transparent 100%);
+}
+.ink-phase-night .ink-moon {
+  background: radial-gradient(circle, rgba(216, 224, 238, 0.6) 0%, rgba(188, 200, 222, 0.24) 55%, rgba(188, 200, 222, 0) 100%);
+}
+.ink-phase-night .ink-tint {
+  background: linear-gradient(180deg, rgba(74, 90, 118, 0.16) 0%, rgba(58, 71, 94, 0.09) 60%, rgba(44, 53, 70, 0.06) 100%);
+}
+
+/* 无障碍：v2.7 新增动画统一接入减少动态偏好与手动关闭 */
+@media (prefers-reduced-motion: reduce) {
+  .anim-shake, .anim-auth-swap { animation: none; }
+  .ink-moon, .ink-tint { transition: none; }
+}
+html.motion-off .anim-shake,
+html.motion-off .anim-auth-swap { animation: none; }
+html.motion-off .ink-moon,
+html.motion-off .ink-tint { transition: none; }
+
+/* ===== 加载骨架：墨纸微光横向扫过（v3） ===== */
+@keyframes skeletonShimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -80% 0; }
+}
+.skeleton-shimmer {
+  background-color: color-mix(in srgb, var(--paper-dark) 72%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--paper-light) 80%, transparent) 50%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer { animation: none; background-image: none; }
+}
+html.motion-off .skeleton-shimmer { animation: none; background-image: none; }

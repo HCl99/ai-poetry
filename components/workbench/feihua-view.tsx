@@ -171,7 +171,7 @@ export function FeihuaView() {
   /* ---- 对战进行中 ---- */
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <span className="flex h-16 w-16 items-center justify-center rounded-xl font-brush text-4xl text-white shadow-ink" style={{ background: 'var(--btn-grad)' }}>{char}</span>
           <div>
@@ -208,8 +208,8 @@ export function FeihuaView() {
                 >
                   {m.text}
                 </div>
-                <div className={`mt-1 flex items-center gap-2 font-ui text-[11px] text-ink-soft ${m.side === 'user' ? 'justify-end' : ''}`}>
-                  {m.judged && <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5" style={{ background: 'rgba(196,169,101,0.18)', color: '#8B7355' }}><CheckCheck className="h-3 w-3" /> GLM 审校通过</span>}
+                <div className={`mt-1 flex flex-wrap items-center gap-2 font-ui text-[11px] text-ink-soft ${m.side === 'user' ? 'justify-end' : ''}`}>
+                  {m.judged && <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5" style={{ background: 'color-mix(in srgb, var(--gold-wash) 18%, transparent)', color: 'color-mix(in srgb, var(--sepia) 70%, var(--ink-deep))' }}><CheckCheck className="h-3 w-3" /> GLM 审校通过</span>}
                   {m.source && <span>〔{m.source.dynasty}〕{m.source.author}《{m.source.title}》</span>}
                 </div>
               </div>

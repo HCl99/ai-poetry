@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ProfileModal } from './profile-modal';
 import { InkAmbience } from './ink-ambience';
+import { Onboarding } from './onboarding';
 
 const NAV = [
   { key: 'portal', label: '系统首页', href: '/home', icon: 'portal' },
@@ -20,6 +21,7 @@ const NAV = [
   { key: 'compare', label: '多模型对比', href: '/workbench/compare', icon: 'scale', badge: 'AI' },
   { key: 'rag-eval', label: 'RAG评测', href: '/workbench/rag-eval', icon: 'flask', badge: 'AI' },
   { key: 'imagery', label: '意象图谱', href: '/workbench/imagery', icon: 'image' },
+  { key: 'vision', label: '以图搜诗', href: '/workbench/vision', icon: 'eye', badge: 'AI' },
   { key: 'imagery-timeline', label: '时空地图', href: '/workbench/imagery-timeline', icon: 'timeline' },
   { key: 'graph', label: '诗人图谱', href: '/workbench/graph', icon: 'network' },
   { key: 'stats', label: '数据大屏', href: '/workbench/stats', icon: 'chart' },
@@ -44,6 +46,7 @@ function NavIcon({ name }: { name: string }) {
     case 'sparkles': return <svg {...common}><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" /></svg>;
     case 'edit': return <svg {...common}><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>;
     case 'image': return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-4-4-8 8" /></svg>;
+    case 'eye': return <svg {...common}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
     case 'network': return <svg {...common}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="12" cy="18" r="2.5" /><path d="m8 7.5 7.5.3M7 8.5l4 7M16.5 10.5l-3.5 5.5" /></svg>;
     case 'chart': return <svg {...common}><path d="M3 3v18h18" /><rect x="7" y="12" width="3" height="6" rx="0.5" /><rect x="12" y="8" width="3" height="10" rx="0.5" /><rect x="17" y="5" width="3" height="13" rx="0.5" /></svg>;
     case 'users': return <svg {...common}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
@@ -113,7 +116,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
   }
 
   return (
-    <div className="min-h-screen" data-theme={dark ? 'dark' : undefined} style={dark ? { background: '#1D1B18' } : undefined}>
+    <div className="min-h-screen" data-theme={dark ? 'dark' : undefined} style={{ background: 'var(--paper)' }}>
       {/* 水墨氛围背景：墨晕呼吸 + 墨滴扩散 + 明月轻浮（-z 层，不遮挡内容） */}
       <InkAmbience />
       {/* 顶部栏 */}
@@ -132,7 +135,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
               </span>
               <form action="/workbench/explore" className="w-full">
-                <input name="q" placeholder="搜索诗题、作者…" className="h-10 w-full rounded-full border border-c bg-white/70 pl-10 pr-4 font-ui text-sm outline-none transition-ink focus:border-ink-mid" />
+                <input name="q" placeholder="搜索诗题、作者…" className="h-10 w-full rounded-full border border-c pl-10 pr-4 font-ui text-sm outline-none transition-ink focus:border-ink-mid" style={{ background: 'color-mix(in srgb, var(--paper-light) 70%, transparent)' }} />
               </form>
             </div>
           </div>
@@ -157,7 +160,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
                 aria-expanded={notifOpen}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: '#A67C7C' }} />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: 'var(--rose)' }} />
               </button>
               {notifOpen && (
                 <div
@@ -220,7 +223,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
                 <NavIcon name={n.icon} />
                 {n.label}
                 {n.badge && (
-                  <span className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={active ? { background: 'rgba(107,142,123,0.35)', color: 'var(--btn-text)' } : { background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{n.badge}</span>
+                  <span className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={active ? { background: 'color-mix(in srgb, var(--sage) 35%, transparent)', color: 'var(--btn-text)' } : { background: 'color-mix(in srgb, var(--sage) 15%, transparent)', color: 'var(--sage)' }}>{n.badge}</span>
                 )}
               </Link>
             );
@@ -246,7 +249,7 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
             ) : (
               <span className="relative flex h-9 w-9 items-center justify-center rounded-full font-brush text-sm text-white" style={{ background: 'var(--brand-grad)' }}>
                 {(user.name || user.email || '客')[0]}
-                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
+                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-paper-light" style={{ background: 'var(--sage)' }} />
               </span>
             )}
             <span className="min-w-0 flex-1">
@@ -269,6 +272,9 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
         user={{ name: user.name || '诗词探索者', email: user.email || '', avatar: user.avatar }}
         onLogout={handleLogout}
       />
+
+      {/* 新手引导：首次进入工作台的三步导览，完成后 localStorage 持久化 */}
+      <Onboarding />
     </div>
   );
 }

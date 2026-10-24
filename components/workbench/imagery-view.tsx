@@ -8,13 +8,17 @@ import { GraphQaPanel } from './graph-qa';
 interface ImageryItem { char: string; count: number }
 interface Edge { source: string; target: string; weight: number }
 
-const NODE_COLORS = ['#6B8E7B', '#8B7355', '#7B8EA1', '#A67C7C', '#C4A965', '#5D5853'];
+const NODE_COLORS = ['var(--sage)', 'var(--sepia)', 'var(--muted-blue)', 'var(--rose)', 'var(--gold-wash)', 'var(--ink-mid)'];
+
+/** 语义色轻着色 / 明暗主题下可读的同色系文字 */
+const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
+const readable = (c: string) => `color-mix(in srgb, ${c} 70%, var(--ink-deep))`;
 
 const CULTURE_NOTES: Record<string, { t: string; d: string; c: string }[]> = {
   月: [
-    { t: '月 → 乡愁', d: '"举头望明月，低头思故乡"，明月是千年乡愁的文化密码。', c: '#6B8E7B' },
-    { t: '月 → 孤独', d: '月下独酌、对影成三人，明月是孤独者的唯一知己。', c: '#8B7355' },
-    { t: '月 → 秋', d: '中秋之月承载团圆之意，秋月清冷映照羁旅愁思。', c: '#A67C7C' },
+    { t: '月 → 乡愁', d: '"举头望明月，低头思故乡"，明月是千年乡愁的文化密码。', c: 'var(--sage)' },
+    { t: '月 → 孤独', d: '月下独酌、对影成三人，明月是孤独者的唯一知己。', c: 'var(--sepia)' },
+    { t: '月 → 秋', d: '中秋之月承载团圆之意，秋月清冷映照羁旅愁思。', c: 'var(--rose)' },
   ],
 };
 
@@ -69,7 +73,7 @@ export function ImageryView({ imagery, edges, initialFocus }: {
       <div className="paper-card relative h-[420px] overflow-hidden">
         <svg className="absolute inset-0 h-full w-full">
           {neighbors.map((n, i) => (
-            <line key={n.char} x1="50%" y1="50%" x2={pos[i].x} y2={pos[i].y} stroke="#D4CFC5" strokeWidth={Math.round(Math.min(3, 0.5 + n.weight / 2000) * 100) / 100} />
+            <line key={n.char} x1="50%" y1="50%" x2={pos[i].x} y2={pos[i].y} stroke="var(--border-c)" strokeWidth={Math.round(Math.min(3, 0.5 + n.weight / 2000) * 100) / 100} />
           ))}
         </svg>
         {/* 中心节点 */}
@@ -85,7 +89,7 @@ export function ImageryView({ imagery, edges, initialFocus }: {
           <div
             key={n.char}
             className="absolute z-10 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full font-brush text-lg transition-ink hover:scale-110"
-            style={{ left: pos[i].x, top: pos[i].y, background: `${NODE_COLORS[i % NODE_COLORS.length]}26`, color: NODE_COLORS[i % NODE_COLORS.length] }}
+            style={{ left: pos[i].x, top: pos[i].y, background: tint(NODE_COLORS[i % NODE_COLORS.length], 15), color: readable(NODE_COLORS[i % NODE_COLORS.length]) }}
             onClick={() => setFocus(n.char)}
             title={`切换到「${n.char}」`}
           >
@@ -130,8 +134,8 @@ export function ImageryView({ imagery, edges, initialFocus }: {
                 <p className={`mt-0.5 font-ui text-xs ${focus === im.char ? '' : 'text-ink-soft'}`} style={focus === im.char ? { color: 'var(--btn-text)', opacity: 0.75 } : {}}>
                   {im.count}
                 </p>
-                <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: 'rgba(60,50,40,0.08)' }}>
-                  <div className="h-full rounded-full" style={{ width: `${(im.count / maxCount) * 100}%`, background: focus === im.char ? '#C4A965' : '#7B8EA1' }} />
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: 'var(--paper-dark)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${(im.count / maxCount) * 100}%`, background: focus === im.char ? 'var(--gold-wash)' : 'var(--muted-blue)' }} />
                 </div>
               </button>
             ))}
@@ -141,7 +145,7 @@ export function ImageryView({ imagery, edges, initialFocus }: {
         <div className="space-y-4">
           {notes.map((r, i) => (
             <div key={i} className="paper-card p-4" style={{ borderLeft: `3px solid ${r.c}` }}>
-              <div className="font-ui text-sm font-medium" style={{ color: r.c }}>{r.t}</div>
+              <div className="font-ui text-sm font-medium" style={{ color: readable(r.c) }}>{r.t}</div>
               <p className="mt-1 font-ui text-sm leading-relaxed text-ink-mid">{r.d}</p>
             </div>
           ))}

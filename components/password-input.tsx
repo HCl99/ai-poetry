@@ -31,11 +31,16 @@ function EyeIcon({ off }: { off?: boolean }) {
   );
 }
 
+/** focus 墨晕：边框加深 + 四层墨色光晕经 transition-ink 平滑扩散；外层 group 供图标随 focus-within 上色 */
 export const PASSWORD_INPUT_CLASS =
-  'h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-10 text-sm outline-none transition-ink focus:border-ink-deep focus:shadow-[0_0_0_3px_rgba(58,56,53,0.08)]';
+  'h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-10 text-sm outline-none transition-ink focus:border-ink-deep focus:shadow-[0_0_0_4px_rgba(58,56,53,0.10),0_2px_14px_rgba(58,56,53,0.08)]';
 
 export const TEXT_INPUT_CLASS =
-  'h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-3 text-sm outline-none transition-ink focus:border-ink-deep focus:shadow-[0_0_0_3px_rgba(58,56,53,0.08)]';
+  'h-11 w-full rounded-lg border-[1.5px] border-c bg-white/60 pl-10 pr-3 text-sm outline-none transition-ink focus:border-ink-deep focus:shadow-[0_0_0_4px_rgba(58,56,53,0.10),0_2px_14px_rgba(58,56,53,0.08)]';
+
+/** 左侧图标容器：focus-within 时图标由灰墨转为深墨（配合 group 作用域） */
+export const INPUT_ICON_CLASS =
+  'pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft transition-ink group-focus-within:text-[#3A3835]';
 
 /** 密码输入框：带锁形图标与明文/密文切换，登录注册与弹窗共用 */
 export function PasswordInput({
@@ -62,8 +67,8 @@ export function PasswordInput({
     setCaps(e.getModifierState?.('CapsLock') ?? false);
   }
   return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><LockIcon /></span>
+    <div className="group relative">
+      <span className={INPUT_ICON_CLASS}><LockIcon /></span>
       <input
         name={name}
         type={show ? 'text' : 'password'}

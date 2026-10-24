@@ -86,7 +86,7 @@ export function ExploreGrid({
             defaultValue={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索诗题、作者…"
-            className="h-9 w-full rounded-full border border-c bg-white/70 px-4 font-ui text-sm outline-none transition-ink focus:border-ink-mid md:w-64"
+            className="h-9 w-full min-w-0 flex-1 rounded-full border border-c bg-white/70 px-4 font-ui text-sm outline-none transition-ink focus:border-ink-mid md:w-64 md:flex-none"
           />
           <button type="submit" className="h-9 shrink-0 rounded-full px-5 font-ui text-sm text-white transition-ink" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>
             搜索

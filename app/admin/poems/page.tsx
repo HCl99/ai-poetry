@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { PageHead, AdminTable, Tr, Td, Badge, Pagination, Empty, Modal, inputCls, textareaCls, primaryBtn } from '@/components/admin/ui';
 
 interface PoemRow {
@@ -23,6 +24,7 @@ export default function AdminPoemsPage() {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const { msg, show } = useToast();
+  const confirm = useConfirm();
   const size = 10;
 
   const load = useCallback(async (p = page) => {
@@ -68,7 +70,13 @@ export default function AdminPoemsPage() {
   }
 
   async function remove(p: PoemRow) {
-    if (!confirm(`确定删除《${p.title}》吗？其注解、意象关联与向量切片将一并删除。`)) return;
+    const ok = await confirm({
+      title: '删除诗词',
+      message: `确定删除《${p.title}》吗？其注解、意象关联与向量切片将一并删除。`,
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/poems?id=${p.id}`, { method: 'DELETE' });
       const d = await res.json();
@@ -174,6 +182,7 @@ export default function AdminPoemsPage() {
           </div>
         )}
       </Modal>
+      {confirm.dialog}
       <Toast msg={msg} />
     </div>
   );

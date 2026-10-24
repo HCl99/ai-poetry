@@ -126,7 +126,7 @@ export function PoemDetailView({ poem, bio, initial }: {
 
       {/* 诗头 */}
       <div className="text-center">
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <span className={`dynasty-tag ${DYNASTY_CLASS[poem.dynasty] || 'dynasty-tang'}`}>{poem.dynasty}</span>
           <h1 className="font-brush text-3xl text-ink-deep">{poem.title}</h1>
         </div>

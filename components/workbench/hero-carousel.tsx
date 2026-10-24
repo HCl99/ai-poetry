@@ -23,7 +23,7 @@ const SCENES: { key: string; name: string; line: string; img: string; scrim: str
     img: '/ink-rain.jpg',
     scrim: 'linear-gradient(105deg, rgba(30,46,56,0.72) 0%, rgba(30,46,56,0.48) 46%, rgba(30,46,56,0.2) 100%)',
     deco: (
-      <div className="anim-ink-drift absolute bottom-6 left-0 h-10 w-[130%] opacity-70" style={{ background: 'linear-gradient(90deg, transparent, rgba(250,248,243,0.22), transparent)' }} />
+      <div className="anim-ink-drift absolute bottom-6 left-0 h-10 w-[130%] opacity-70" style={{ background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--on-image) 22%, transparent), transparent)' }} />
     ),
   },
   {
@@ -74,7 +74,7 @@ export function HeroCarousel({ children }: { children: ReactNode }) {
       <span
         key={`name-${idx}`}
         className="anim-fade-up absolute right-6 top-5 z-10 font-brush text-sm"
-        style={{ color: 'rgba(245,242,236,0.45)' }}
+        style={{ color: 'color-mix(in srgb, var(--on-image) 45%, transparent)' }}
       >
         {scene.name}
       </span>
@@ -83,7 +83,7 @@ export function HeroCarousel({ children }: { children: ReactNode }) {
       <div className="relative z-10 p-6 md:p-8">
         {children}
         {/* 场景句：随背景切换淡入 */}
-        <p key={`line-${idx}`} className="anim-fade-up mt-2 min-h-[1.6em] font-serif text-[15px]" style={{ color: 'rgba(245,242,236,0.9)' }}>
+        <p key={`line-${idx}`} className="anim-fade-up mt-2 min-h-[1.6em] font-serif text-[15px]" style={{ color: 'color-mix(in srgb, var(--on-image) 90%, transparent)' }}>
           {scene.line}
         </p>
         {/* 场景指示器 */}
@@ -96,7 +96,7 @@ export function HeroCarousel({ children }: { children: ReactNode }) {
               className="h-1.5 rounded-full transition-all duration-500"
               style={{
                 width: i === idx ? 22 : 8,
-                background: i === idx ? 'rgba(245,242,236,0.92)' : 'rgba(245,242,236,0.35)',
+                background: i === idx ? 'color-mix(in srgb, var(--on-image) 92%, transparent)' : 'color-mix(in srgb, var(--on-image) 35%, transparent)',
               }}
             />
           ))}

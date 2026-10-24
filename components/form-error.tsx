@@ -15,3 +15,16 @@ export function FormError({ msg }: { msg: string }) {
     </div>
   );
 }
+
+/**
+ * 登录/注册失败反馈：卡片轻摇提示。
+ * 通过移除→强制重排→重加类实现连续失败可重复触发；动画本身接入 prefers-reduced-motion。
+ */
+export function shakeAuthCard() {
+  if (typeof document === 'undefined') return;
+  const card = document.getElementById('auth-card');
+  if (!card) return;
+  card.classList.remove('anim-shake');
+  void card.offsetWidth;
+  card.classList.add('anim-shake');
+}

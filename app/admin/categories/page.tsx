@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { PageHead, Empty, inputCls, primaryBtn } from '@/components/admin/ui';
 
 interface CatData {
@@ -24,6 +25,7 @@ export default function AdminCategoriesPage() {
   const [newChar, setNewChar] = useState('');
   const [busy, setBusy] = useState(false);
   const { msg, show } = useToast();
+  const confirm = useConfirm();
 
   const load = useCallback(async (query = q) => {
     try {
@@ -60,7 +62,13 @@ export default function AdminCategoriesPage() {
   }
 
   async function removeImagery(char: string) {
-    if (!confirm(`确定删除意象「${char}」吗？其与诗词的关联也会一并清理。`)) return;
+    const ok = await confirm({
+      title: '删除意象',
+      message: `确定删除意象「${char}」吗？其与诗词的关联也会一并清理。`,
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/categories?char=${encodeURIComponent(char)}`, { method: 'DELETE' });
       const d = await res.json();
@@ -148,6 +156,7 @@ export default function AdminCategoriesPage() {
           </div>
         ))}
       </section>
+      {confirm.dialog}
       <Toast msg={msg} />
     </div>
   );

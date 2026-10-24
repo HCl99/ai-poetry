@@ -1,21 +1,19 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { prisma } from '@/lib/prisma';
-import { AuthSplit } from '@/components/auth-split';
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = { title: '登录 · 墨韵诗心' };
 
-export default async function LoginPage() {
-  const totalPoems = await prisma.poem.count();
+export default function LoginPage() {
   return (
-    <AuthSplit totalPoems={totalPoems}>
+    <>
       <div className="px-8 pb-7 pt-10 text-center">
-        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full font-brush text-xl text-white shadow-ink" style={{ background: 'linear-gradient(135deg,#3A3835,#5D5853)' }}>
-          墨
+        {/* 卡头场景化：登录=「月」归人望乡意象（黛蓝渐变），与注册页「笔」拉开场景差异 */}
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full font-brush text-xl text-white shadow-ink" style={{ background: 'linear-gradient(135deg,#7B8EA1,#5D7185)' }}>
+          月
         </div>
         <div className="font-brush text-[28px] leading-tight text-ink-deep">墨韵诗心</div>
-        <p className="mt-1 font-ui text-sm text-ink-soft">登录以继续你的诗词探索之旅</p>
+        <p className="mt-1 font-ui text-sm text-ink-soft">欢迎回来，月色如旧，诗旅继续</p>
       </div>
 
       <LoginForm />
@@ -26,6 +24,6 @@ export default async function LoginPage() {
           立即注册
         </Link>
       </div>
-    </AuthSplit>
+    </>
   );
 }

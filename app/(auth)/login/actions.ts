@@ -16,7 +16,8 @@ export async function authenticate(formData: FormData): Promise<string> {
     await signIn('credentials', {
       email: formData.get('email'),
       password: formData.get('password'),
-      redirectTo: '/home',
+      // 成功不在服务端 redirect：交由客户端展示「✓ 正在进入诗境」成功态后自行 router.push('/home')
+      redirect: false,
     });
     return '';
   } catch (error) {

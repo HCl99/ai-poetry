@@ -25,6 +25,7 @@ export async function PUT(req: Request) {
   if (!ok) return Response.json({ error: '旧密码不正确' }, { status: 400 });
 
   const hash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
-  return Response.json({ ok: true });
+  // 改密时间戳：旧会话全部失效，前端收到 reLogin 后引导重新登录
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash, passwordChangedAt: new Date() } });
+  return Response.json({ ok: true, reLogin: true });
 }

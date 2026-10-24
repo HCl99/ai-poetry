@@ -124,14 +124,16 @@ model AnnotationLog {
 
 // 用户表（鉴权）
 model User {
-  id           String   @id @default(uuid()) @db.Char(36)
-  email        String   @unique @db.VarChar(255)
-  name         String?  @db.VarChar(64)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  role         String   @default("user") @db.VarChar(16)
-  status       String   @default("active") @db.VarChar(16)
-  avatar       String?  @db.Text
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                String    @id @default(uuid()) @db.Char(36)
+  email             String    @unique @db.VarChar(255)
+  name              String?   @db.VarChar(64)
+  passwordHash      String    @map("password_hash") @db.VarChar(255)
+  role              String    @default("user") @db.VarChar(16)
+  status            String    @default("active") @db.VarChar(16)
+  avatar            String?   @db.Text
+  // 密码最后修改时间：JWT 会话签发时间早于该值即视为失效（改密/重置后强制重新登录）
+  passwordChangedAt DateTime? @map("password_changed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
 
   @@map("users")
 }
@@ -270,6 +272,21 @@ model Note {
 
   @@index([userId, createdAt], map: "idx_note_user")
   @@map("notes")
+}
+
+// 邮箱验证码（注册验证 / 找回密码共用，只存哈希、一次性消费）
+model EmailCode {
+  id         BigInt    @id @default(autoincrement())
+  email      String    @db.VarChar(255)
+  codeHash   String    @map("code_hash") @db.VarChar(255)
+  purpose    String    @db.VarChar(16)
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([email, purpose, createdAt], map: "idx_email_code")
+  @@map("email_codes")
 }
 
 // 测验记录（选择/填空/鉴赏）

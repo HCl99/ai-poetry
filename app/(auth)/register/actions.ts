@@ -6,15 +6,20 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { signIn } from '@/auth';
 import { rateLimit } from '@/lib/rateLimit';
+import { verifyCode } from '@/lib/email-code';
 
 export async function registerUser(formData: FormData): Promise<{ error?: string }> {
   const name = (formData.get('name') as string)?.trim();
   const email = (formData.get('email') as string)?.trim().toLowerCase();
   const password = formData.get('password') as string;
   const confirm = formData.get('confirm') as string;
+  const code = (formData.get('code') as string)?.trim();
 
   if (!email || !password) {
     return { error: '邮箱和密码不能为空' };
+  }
+  if (!code) {
+    return { error: '请填写邮箱验证码' };
   }
   if (password !== confirm) {
     return { error: '两次输入的密码不一致' };
@@ -31,6 +36,12 @@ export async function registerUser(formData: FormData): Promise<{ error?: string
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return { error: '该邮箱已注册' };
+  }
+
+  // 邮箱验证码：一次性消费，校验失败不创建账号
+  const verified = await verifyCode(email, 'register', code);
+  if (!verified.ok) {
+    return { error: verified.error };
   }
 
   const passwordHash = await bcrypt.hash(password, 10);

@@ -177,8 +177,15 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
       const r = await fetch('/api/user/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }) });
       const d = await r.json();
       if (!r.ok) { show(d.error || '修改失败'); return; }
-      show('密码修改成功');
       setOldPwd(''); setNewPwd(''); setConfirmPwd('');
+      if (d.reLogin) {
+        // 改密后旧会话已被服务端作废，主动登出并引导重新登录
+        show('密码修改成功，请重新登录');
+        await fetch('/api/auth/logout', { method: 'POST' });
+        setTimeout(() => router.push('/login'), 900);
+        return;
+      }
+      show('密码修改成功');
     } finally {
       setSavingPwd(false);
     }

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 /** 管理后台布局：RBAC 守卫，非管理员重定向回工作台 */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user) redirect('/login');
+  if (!session?.user?.id || session.user.role === 'disabled') redirect('/login');
   if (session.user.role !== 'admin') redirect('/workbench');
 
   return (

@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { registerUser } from './actions';
-import { PasswordInput, TEXT_INPUT_CLASS } from '@/components/password-input';
-import { WechatLoginButton } from '@/components/wechat-login';
-import { FormError } from '@/components/form-error';
+import { PasswordInput, TEXT_INPUT_CLASS, INPUT_ICON_CLASS } from '@/components/password-input';
+import { FormError, shakeAuthCard } from '@/components/form-error';
+import { EmailCodeField } from '@/components/email-code-field';
 
 function MailIcon() {
   return (
@@ -46,8 +46,16 @@ export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmMsg, setConfirmMsg] = useState('');
+  const [emailMsg, setEmailMsg] = useState('');
   const [pwd, setPwd] = useState('');
+  const [email, setEmail] = useState('');
   const strength = pwdStrength(pwd);
+
+  /** 邮箱即时校验：blur 时反馈格式，出错后输入中实时纠正 */
+  function checkEmail(v: string) {
+    const t = v.trim();
+    setEmailMsg(t && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? '邮箱格式似乎不正确' : '');
+  }
 
   /** 确认密码即时比对：输入即提示，不留到提交后 */
   function checkConfirm(e: React.ChangeEvent<HTMLInputElement>) {
@@ -72,6 +80,7 @@ export function RegisterForm() {
     const pre = validate(e);
     if (pre) {
       setError(pre);
+      shakeAuthCard();
       return;
     }
     setLoading(true);
@@ -79,25 +88,40 @@ export function RegisterForm() {
       const res = await registerUser(new FormData(e.currentTarget));
       if (res?.error) {
         setError(res.error);
+        shakeAuthCard();
         setLoading(false);
       }
       // 成功时 server action 内部 redirect 到 /workbench
     } catch {
       setError('网络异常，请重试');
+      shakeAuthCard();
       setLoading(false);
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 px-8 pb-6 font-ui">
-      <div className="relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><UserIcon /></span>
+      <div className="group relative">
+        <span className={INPUT_ICON_CLASS}><UserIcon /></span>
         <input name="name" placeholder="昵称（选填）" autoComplete="nickname" className={TEXT_INPUT_CLASS} />
       </div>
-      <div className="relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"><MailIcon /></span>
-        <input name="email" type="email" required placeholder="邮箱" autoComplete="email" className={TEXT_INPUT_CLASS} />
+      <div>
+        <div className="group relative">
+          <span className={INPUT_ICON_CLASS}><MailIcon /></span>
+          <input
+            name="email"
+            type="email"
+            required
+            placeholder="邮箱"
+            autoComplete="email"
+            onBlur={(e) => checkEmail(e.currentTarget.value)}
+            onChange={(e) => { setEmail(e.currentTarget.value); if (emailMsg) checkEmail(e.currentTarget.value); }}
+            className={TEXT_INPUT_CLASS}
+          />
+        </div>
+        {emailMsg && <p className="mt-1.5 text-xs" style={{ color: '#A67C7C' }}>{emailMsg}</p>}
       </div>
+      <EmailCodeField email={email} purpose="register" />
       <div>
         <PasswordInput
           name="password"
@@ -151,8 +175,6 @@ export function RegisterForm() {
         {loading && <span className="spinner" style={{ width: 16, height: 16 }} />}
         {loading ? '注册中…' : '注  册'}
       </button>
-
-      <WechatLoginButton />
     </form>
   );
 }

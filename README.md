@@ -135,7 +135,7 @@ pm2 save
 nohup python scripts/embed_server.py > embed.log 2>&1 &
 ```
 
-> **降级策略**：向量服务不可用时，AI 注解 / AI 助手自动降级为关键词检索，界面会明确展示「向量服务不可用，已降级」的过程提示，功能不中断（可用性优先）。演示完整 RAG 能力（混合粗排 + CrossEncoder 精排）前请确认 8100 端口健康：`curl http://127.0.0.1:8100/health`（返回含 `"reranker":true` 表示精排模型已载入，reranker 为懒加载，首次精排调用时载入）。
+> **降级策略**：向量服务不可用时，AI 注解 / AI 助手自动降级为关键词检索，界面会明确展示「向量服务不可用，已降级」的过程提示，功能不中断（可用性优先）。演示完整 RAG 能力（混合粗排 + CrossEncoder 精排）前请确认 8100 端口健康：`curl http://127.0.0.1:8100/health`（返回含 `"reranker":true` 表示精排模型已随服务启动预加载；如需更快启动可跳过精排，调用方会自动降级为粗排结果）。
 > 本地开发可用 `scripts\start_all.bat`（Windows）一键启动向量服务 + dev server。
 
 ## 六、环境变量

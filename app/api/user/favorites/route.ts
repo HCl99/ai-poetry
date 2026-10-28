@@ -23,7 +23,7 @@ export async function GET() {
         const p = map.get(f.poemId)!;
         const lines = (p.paragraphsSimp as string[] | null) || [];
         return {
-          id: f.id,
+          id: f.id.toString(),
           poemId: p.id,
           title: p.title,
           author: p.author,

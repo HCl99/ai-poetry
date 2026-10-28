@@ -39,6 +39,9 @@ async def main():
         b = await p.chromium.launch()
         ctx = await b.new_context(viewport={'width': 375, 'height': 812})
         pg = await ctx.new_page()
+        # 先建立 origin 并写入「新手引导已完成」，避免截图被引导浮层压暗
+        await pg.goto(f'{BASE}/login', wait_until='domcontentloaded')
+        await pg.evaluate("() => localStorage.setItem('onboarding-done', '1')")
         # NextAuth 凭证登录（CSRF + callback）
         r = await ctx.request.get(f'{BASE}/api/auth/csrf')
         csrf = (await r.json())['csrfToken']

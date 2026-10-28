@@ -219,7 +219,7 @@ export function AssistantView() {
             <Bot className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="font-brush text-xl leading-tight text-ink-deep">AI 诗词助手</h1>
+            <h1 className="font-ui text-[15px] font-medium leading-tight text-ink-deep">AI 诗词助手</h1>
             <p className="font-ui text-[11px] leading-tight text-ink-soft">RAG 检索增强 · 引用硬约束 · 多轮对话</p>
           </div>
           {active && <span className="ml-auto truncate font-ui text-xs text-ink-soft">{active.title}</span>}

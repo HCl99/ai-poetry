@@ -54,7 +54,7 @@ export default async function DashboardPage() {
   const uid = session!.user.id!;
   const name = session!.user.name || '诗词探索者';
 
-  const [favCount, creationCount, annotateCount, histories, readPoems, annotateDistinctList, dailyCount, imageryTop, agentLogs] =
+  const [favCount, creationCount, annotateCount, histories, readPoems, annotateDistinctList, dailyCount, imageryTop, agentLogs, poemTotal] =
     await Promise.all([
       prisma.favorite.count({ where: { userId: uid } }),
       prisma.creation.count({ where: { userId: uid } }),
@@ -73,6 +73,7 @@ export default async function DashboardPage() {
       prisma.poem.count({ where: { annotations: { isNot: null }, tags: { not: '[]' } } }),
       prisma.imagery.findMany({ orderBy: { count: 'desc' }, take: 6 }),
       prisma.annotationLog.findMany({ orderBy: { createdAt: 'desc' }, take: 4 }),
+      prisma.poem.count(),
     ]);
 
   // 每日一诗：当日全站固定；学习路径：推荐一首用户未读过的经典
@@ -105,14 +106,14 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       {/* 欢迎卡片：水墨场景轮播，每张背景对应一句贴合系统的话（v2.2 动态化） */}
       <HeroCarousel>
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-brush text-3xl text-on-image md:text-4xl">{greeting()}，{name}</h1>
-            <p className="mt-2 font-ui text-sm" style={{ color: 'color-mix(in srgb, var(--on-image) 75%, transparent)' }}>
+            <h1 className="font-brush text-2xl text-on-image md:text-3xl">{greeting()}，{name}</h1>
+            <p className="mt-1.5 font-ui text-sm" style={{ color: 'color-mix(in srgb, var(--on-image) 75%, transparent)' }}>
               最近活动 {recent.length} 项 · AI注解 {annotateCount} 条 · 创作 {creationCount} 首
             </p>
             {dailyPoem && (
-              <div className="mt-4 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-3" style={{ background: 'color-mix(in srgb, var(--on-image) 12%, transparent)' }}>
+              <div className="mt-3 inline-flex max-w-xl items-start gap-3 rounded-lg px-4 py-2.5" style={{ background: 'color-mix(in srgb, var(--on-image) 12%, transparent)' }}>
                 <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-ui text-[10px]" style={{ background: 'color-mix(in srgb, var(--gold-wash) 30%, transparent)', color: 'var(--on-image)' }}>每日一诗</span>
                 <div>
                   <p className="font-serif text-sm leading-relaxed text-on-image">
@@ -125,10 +126,24 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
-          <Link href="/workbench/annotate" className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg px-5 py-3 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5" style={{ background: 'var(--inset)', color: 'var(--ink-deep)' }}>
+          <Link href="/workbench/annotate" className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg px-5 py-2.5 font-ui text-sm font-medium transition-ink hover:-translate-y-0.5" style={{ background: 'var(--inset)', color: 'var(--ink-deep)' }}>
             <Sparkles className="h-4 w-4" /> 开始AI注解
           </Link>
         </div>
+        {/* AI 实时证据条：最近一次 RAG 调用的真实链路数据，让「AI 正在发生」首屏可见 */}
+        {agentLogs[0] && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3.5 py-2 font-ui text-xs" style={{ background: 'color-mix(in srgb, var(--on-image) 10%, transparent)', color: 'color-mix(in srgb, var(--on-image) 85%, transparent)' }}>
+            <span className="inline-flex items-center gap-1.5 font-medium text-on-image">
+              <span className="pulse-dot" /> AI 引擎运行中
+            </span>
+            <span style={{ color: 'color-mix(in srgb, var(--on-image) 40%, transparent)' }}>|</span>
+            <span>
+              最近一次：检索 {(poemTotal / 10000).toFixed(1)} 万首 → 命中 {(agentLogs[0].retrievedChunks as string[] | null)?.length ?? 0} 篇 → 引用 {(agentLogs[0].answer?.match(/《/g) || []).length} 处
+            </span>
+            <span style={{ color: 'color-mix(in srgb, var(--on-image) 40%, transparent)' }}>|</span>
+            <span>{agentLogs[0].model || 'glm-4-flash'} · {((agentLogs[0].latencyMs ?? 0) / 1000).toFixed(1)}s</span>
+          </div>
+        )}
       </HeroCarousel>
 
       {/* 统计卡片（进场递增浮现） */}

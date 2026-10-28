@@ -80,7 +80,7 @@ export function HeroCarousel({ children }: { children: ReactNode }) {
       </span>
 
       {/* 内容层 */}
-      <div className="relative z-10 p-6 md:p-8">
+      <div className="relative z-10 p-5 md:p-6">
         {children}
         {/* 场景句：随背景切换淡入 */}
         <p key={`line-${idx}`} className="anim-fade-up mt-2 min-h-[1.6em] font-serif text-[15px]" style={{ color: 'color-mix(in srgb, var(--on-image) 90%, transparent)' }}>

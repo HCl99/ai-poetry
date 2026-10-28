@@ -8,16 +8,17 @@
   --ink-black: #2C2C2C;
   --ink-deep: #3A3835;
   --ink-mid: #5D5853;
-  --ink-soft: #8B857E;
+  /* WCAG AA：以下文字色在 --paper/--paper-light 上对比度均 ≥ 4.5:1 */
+  --ink-soft: #6E6862;
   /* 纸色系 */
   --paper: #F5F2EC;
   --paper-light: #FAF8F3;
   --paper-dark: #EAE4D8;
-  /* 辅助色 */
-  --sepia: #8B7355;
-  --rose: #A67C7C;
-  --sage: #6B8E7B;
-  --muted-blue: #7B8EA1;
+  /* 辅助色（文字用途已按 4.5:1 对比度校准） */
+  --sepia: #6E5A41;
+  --rose: #865C5C;
+  --sage: #51705E;
+  --muted-blue: #5B6E7E;
   --gold-wash: #C4A965;
   /* 边框与阴影 */
   --border-c: #D4CFC5;
@@ -65,6 +66,11 @@
   --ink-deep: #E2DCD0;
   --ink-mid: #C6BEB0;
   --ink-soft: #9C9487;
+  /* 深色主题辅助色：在深底上对比度校准至 ≥ 4.5:1 */
+  --sepia: #A08A68;
+  --rose: #B08A8A;
+  --sage: #7FA08E;
+  --muted-blue: #8DA2B5;
   --paper: #1D1B18;
   --paper-light: #27241F;
   --paper-dark: #35302A;

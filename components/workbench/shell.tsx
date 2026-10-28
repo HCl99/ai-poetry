@@ -7,26 +7,53 @@ import { ProfileModal } from './profile-modal';
 import { InkAmbience } from './ink-ambience';
 import { Onboarding } from './onboarding';
 
-const NAV = [
+type NavItem = { key: string; label: string; href: string; icon: string };
+
+/** 置顶入口：门户与工作台 */
+const NAV_TOP: NavItem[] = [
   { key: 'portal', label: '系统首页', href: '/home', icon: 'portal' },
   { key: 'dashboard', label: '工作台', href: '/workbench', icon: 'home' },
-  { key: 'explore', label: '诗词探索', href: '/workbench/explore', icon: 'book' },
-  { key: 'assistant', label: 'AI 助手', href: '/workbench/assistant', icon: 'bot', badge: 'AI' },
-  { key: 'recite', label: '背诵闯关', href: '/workbench/recite', icon: 'grad' },
-  { key: 'quiz', label: '诗词测验', href: '/workbench/quiz', icon: 'clipboard' },
-  { key: 'annotate', label: 'AI智能注解', href: '/workbench/annotate', icon: 'sparkles', badge: 'AI' },
-  { key: 'transfer', label: '风格迁移', href: '/workbench/transfer', icon: 'edit', badge: 'AI' },
-  { key: 'feihua', label: '飞花令', href: '/workbench/feihua', icon: 'quote', badge: 'AI' },
-  { key: 'poet-chat', label: '诗人对话', href: '/workbench/poet-chat', icon: 'chat', badge: 'AI' },
-  { key: 'compare', label: '多模型对比', href: '/workbench/compare', icon: 'scale', badge: 'AI' },
-  { key: 'rag-eval', label: 'RAG评测', href: '/workbench/rag-eval', icon: 'flask', badge: 'AI' },
-  { key: 'imagery', label: '意象图谱', href: '/workbench/imagery', icon: 'image' },
-  { key: 'vision', label: '以图搜诗', href: '/workbench/vision', icon: 'eye', badge: 'AI' },
-  { key: 'imagery-timeline', label: '时空地图', href: '/workbench/imagery-timeline', icon: 'timeline' },
-  { key: 'graph', label: '诗人图谱', href: '/workbench/graph', icon: 'network' },
-  { key: 'stats', label: '数据大屏', href: '/workbench/stats', icon: 'chart' },
-  { key: 'mcp', label: 'MCP 工具', href: '/workbench/mcp', icon: 'plug' },
-  { key: 'community', label: '作品社区', href: '/workbench/community', icon: 'users' },
+];
+
+/** 分组导航：组名即 AI 信号，不再逐项打「AI」徽章 */
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'AI 创作',
+    items: [
+      { key: 'annotate', label: 'AI智能注解', href: '/workbench/annotate', icon: 'sparkles' },
+      { key: 'transfer', label: '风格迁移', href: '/workbench/transfer', icon: 'edit' },
+      { key: 'assistant', label: 'AI 助手', href: '/workbench/assistant', icon: 'bot' },
+      { key: 'poet-chat', label: '诗人对话', href: '/workbench/poet-chat', icon: 'chat' },
+      { key: 'vision', label: '以图搜诗', href: '/workbench/vision', icon: 'eye' },
+    ],
+  },
+  {
+    label: '探索学习',
+    items: [
+      { key: 'explore', label: '诗词探索', href: '/workbench/explore', icon: 'book' },
+      { key: 'recite', label: '背诵闯关', href: '/workbench/recite', icon: 'grad' },
+      { key: 'quiz', label: '诗词测验', href: '/workbench/quiz', icon: 'clipboard' },
+      { key: 'feihua', label: '飞花令', href: '/workbench/feihua', icon: 'quote' },
+      { key: 'community', label: '作品社区', href: '/workbench/community', icon: 'users' },
+    ],
+  },
+  {
+    label: '图谱数据',
+    items: [
+      { key: 'imagery', label: '意象图谱', href: '/workbench/imagery', icon: 'image' },
+      { key: 'imagery-timeline', label: '时空地图', href: '/workbench/imagery-timeline', icon: 'timeline' },
+      { key: 'graph', label: '诗人图谱', href: '/workbench/graph', icon: 'network' },
+      { key: 'stats', label: '数据大屏', href: '/workbench/stats', icon: 'chart' },
+    ],
+  },
+  {
+    label: '系统透明',
+    items: [
+      { key: 'compare', label: '多模型对比', href: '/workbench/compare', icon: 'scale' },
+      { key: 'rag-eval', label: 'RAG评测', href: '/workbench/rag-eval', icon: 'flask' },
+      { key: 'mcp', label: 'MCP 工具', href: '/workbench/mcp', icon: 'plug' },
+    ],
+  },
 ];
 
 /** 通知面板的「系统公告」：展示近期平台能力更新（真实已上线功能） */
@@ -125,9 +152,9 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
           <button className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-mid transition-ink hover:bg-paper-dark lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="菜单">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
           </button>
-          <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full font-brush text-sm text-white shadow-ink" style={{ background: 'var(--brand-grad)' }}>墨</span>
-            <span className="font-brush text-xl text-ink-deep">墨韵诗心</span>
+          <Link href="/" className="flex shrink-0 items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-brush text-sm text-white shadow-ink" style={{ background: 'var(--brand-grad)' }}>墨</span>
+            <span className="whitespace-nowrap font-brush text-xl text-ink-deep">墨韵诗心</span>
           </Link>
           <div className="mx-auto hidden w-full max-w-[480px] items-center md:flex">
             <div className="relative w-full">
@@ -209,10 +236,9 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
       <aside
         className={`fixed left-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-60 flex-col border-r border-light bg-paper-light transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <nav className="flex flex-col gap-1 p-4">
-          <div className="mb-2 px-3 font-ui text-xs text-ink-soft">主要功能</div>
-          {NAV.map((n) => {
-            const active = pathname === n.href || (n.href !== '/workbench' && pathname.startsWith(n.href));
+        <nav className="flex flex-col gap-1 overflow-y-auto p-4">
+          {NAV_TOP.map((n) => {
+            const active = n.href === '/workbench' ? pathname === '/workbench' : pathname.startsWith(n.href);
             return (
               <Link
                 key={n.key}
@@ -222,12 +248,30 @@ export function WorkbenchShell({ user, children }: { user: { id: string; name?: 
               >
                 <NavIcon name={n.icon} />
                 {n.label}
-                {n.badge && (
-                  <span className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={active ? { background: 'color-mix(in srgb, var(--sage) 35%, transparent)', color: 'var(--btn-text)' } : { background: 'color-mix(in srgb, var(--sage) 15%, transparent)', color: 'var(--sage)' }}>{n.badge}</span>
-                )}
               </Link>
             );
           })}
+          {NAV_GROUPS.map((g) => (
+            <div key={g.label} className="mt-3">
+              <div className="mb-1.5 px-3 font-ui text-[11px] tracking-wide text-ink-soft">{g.label}</div>
+              <div className="flex flex-col gap-1">
+                {g.items.map((n) => {
+                  const active = pathname === n.href || pathname.startsWith(n.href + '/');
+                  return (
+                    <Link
+                      key={n.key}
+                      href={n.href}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 font-ui text-sm transition-ink"
+                      style={active ? { background: 'var(--btn-bg)', color: 'var(--btn-text)' } : { color: 'var(--ink-mid)' }}
+                    >
+                      <NavIcon name={n.icon} />
+                      {n.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
           {user.role === 'admin' && (
             <>
               <div className="mb-2 mt-3 px-3 font-ui text-xs text-ink-soft">管理</div>

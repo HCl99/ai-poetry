@@ -257,5 +257,19 @@ export async function POST(req: Request) {
     return Response.json({ error: '诗篇检索失败，请稍后重试' }, { status: 500 });
   }
 
+  // 记录本次识图结果，供「我的创作」回溯
+  try {
+    await prisma.aiCreation.create({
+      data: {
+        userId: session.user.id,
+        kind: 'vision',
+        prompt: note || analysis.scene || '以图搜诗',
+        result: { analysis: { ...analysis, lookupChars }, poemIds: poems.map((p) => p.id) },
+      },
+    });
+  } catch (e: any) {
+    console.error('save vision creation error', e?.message || e);
+  }
+
   return Response.json({ analysis: { ...analysis, lookupChars }, poems });
 }

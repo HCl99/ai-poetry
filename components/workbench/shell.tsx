@@ -25,6 +25,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { key: 'assistant', label: 'AI 助手', href: '/workbench/assistant', icon: 'bot' },
       { key: 'poet-chat', label: '诗人对话', href: '/workbench/poet-chat', icon: 'chat' },
       { key: 'vision', label: '以图搜诗', href: '/workbench/vision', icon: 'eye' },
+      { key: 'creations', label: '我的创作', href: '/workbench/creations', icon: 'image' },
     ],
   },
   {

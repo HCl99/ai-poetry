@@ -307,3 +307,17 @@ model QuizRecord {
   @@index([userId, createdAt], map: "idx_quiz_user")
   @@map("quiz_records")
 }
+
+// AI 产物（文生图 / 以图搜诗）：把生成结果落库，供「我的创作」回溯
+model AiCreation {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @map("user_id") @db.Char(36)
+  kind      String   @db.VarChar(16)
+  prompt    String   @db.Text
+  imageUrl  String?  @map("image_url") @db.Text
+  result    Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_ai_creation_user")
+  @@map("ai_creations")
+}

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 build_imagery.py - 意象清单构建
-扫描全唐诗，统计30个核心意象在诗篇中的出现，输出意象图谱数据。
+扫描全唐诗，统计50个核心意象在诗篇中的出现，输出意象图谱数据。
 输出: data/imagery.json
 - imagery_list: 意象列表
 - imagery_poems: 每个意象对应的代表诗篇（最多20首）
@@ -14,14 +14,22 @@ import glob
 from collections import defaultdict, Counter
 from opencc import OpenCC
 
-# 30个核心古典意象（按自然/植物/动物/器物/季节分类）
+# 50个核心古典意象（按自然/植物/动物/器物/季节分类）
 CORE_IMAGERY = [
     # 天象地理
     "月", "风", "云", "雪", "雨", "山", "水", "江", "河", "海",
+    # 天象补遗（烟霞霜露，山水画常见）
+    "烟", "霞", "星", "霜", "露",
     # 植物
     "花", "柳", "梅", "菊", "兰", "竹", "桃", "莲", "松", "草",
     # 动物
     "鸟", "雁", "莺", "燕", "蝶", "马", "鱼", "龙",
+    # 建筑关塞
+    "楼", "城", "关", "塞",
+    # 水域行旅（舟桥为水墨画高频主体）
+    "舟", "帆", "洲", "岸", "桥", "溪", "泉",
+    # 器物寄情
+    "酒", "灯", "笛", "钟",
     # 季节时令
     "春", "秋",
 ]
@@ -49,11 +57,10 @@ def scan_tang_poems():
 
 def main():
     cc = OpenCC("t2s")  # 繁体转简体
-    imagery_poems = defaultdict(list)   # imagery -> list of {title,author,id,line}
+    imagery_cands = defaultdict(list)   # imagery -> 候选诗篇（扫描期先全收，末尾择优）
     imagery_count = Counter()            # imagery -> 出现总次数
     co_occurrence = Counter()            # (i,j) 共现次数
     total_poems = 0
-    imagery_set = set(CORE_IMAGERY)
 
     for p in scan_tang_poems():
         total_poems += 1
@@ -66,17 +73,20 @@ def main():
             if im in text_simp:
                 found.add(im)
                 imagery_count[im] += 1
-                # 收集代表句：含该意象的那一句
-                if len(imagery_poems[im]) < 20:
-                    for line in text_simp.split("\n"):
-                        if im in line:
-                            imagery_poems[im].append({
-                                "title": cc.convert(p.get("title", "")),
-                                "author": cc.convert(p.get("author", "")),
-                                "id": p.get("id", ""),
-                                "line": line.strip(),
-                            })
-                            break
+        # 收集代表句：含该意象的那一句；记录本诗意象数（rich），末尾按 rich 择优。
+        # 仅收 120 字内的短篇（绝句/律诗/短古），避免长排律因收字多而垄断"代表作"。
+        lines = text_simp.split("\n")
+        body_len = sum(len(l) for l in lines)
+        if 8 <= body_len <= 120:
+            for im in found:
+                line = next((l.strip() for l in lines if im in l), "")
+                imagery_cands[im].append({
+                    "title": cc.convert(p.get("title", "")),
+                    "author": cc.convert(p.get("author", "")),
+                    "id": p.get("id", ""),
+                    "line": line,
+                    "rich": len(found),
+                })
         # 共现：本诗出现的所有意象两两组合
         found_list = sorted(found)
         for i in range(len(found_list)):
@@ -88,8 +98,16 @@ def main():
         if total_poems % 5000 == 0:
             print(f"[PROGRESS] 已扫描 {total_poems} 首")
 
-    # 排序共现：取前200强边
-    top_edges = sorted(co_occurrence.items(), key=lambda x: -x[1])[:200]
+    # 每个意象取「意象最丰富」的 20 首作为代表，同 richness 按 id 保证可复现
+    imagery_poems = {}
+    for im, cands in imagery_cands.items():
+        cands.sort(key=lambda c: (-c["rich"], c["id"]))
+        imagery_poems[im] = [
+            {k: c[k] for k in ("title", "author", "id", "line")} for c in cands[:20]
+        ]
+
+    # 共现边全量输出（图谱页只取权重前 200 展示；以图搜诗需要覆盖全部组合）
+    top_edges = sorted(co_occurrence.items(), key=lambda x: -x[1])
     edges_out = [{"source": k.split("-")[0], "target": k.split("-")[1], "weight": v}
                  for k, v in top_edges]
 
@@ -110,7 +128,7 @@ def main():
     print(f"[DONE] 输出: {OUT_PATH}")
     print(f"[STATS] 扫描诗篇: {total_poems}")
     print(f"[STATS] 意象覆盖: {len(imagery_count)}/{len(CORE_IMAGERY)}")
-    print(f"[STATS] 共现边: {len(co_occurrence)} (取前200)")
+    print(f"[STATS] 共现边: {len(co_occurrence)}（全量）")
     print(f"[STATS] Top10意象: {imagery_count.most_common(10)}")
 
 

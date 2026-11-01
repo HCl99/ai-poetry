@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""一次性预计算：30 个核心意象 × 各朝代的「含该意象诗数」与例句 → data/imagery-dynasty.json
+"""一次性预计算：意象（当前 50 个）× 各朝代的「含该意象诗数」与例句 → data/imagery-dynasty.json
 口径与 imagery.count 一致：一首诗任意句（简体正文）含该字即计 1。
 """
 import json

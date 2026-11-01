@@ -37,3 +37,10 @@ __pycache__/
 *.pyc
 
 scripts/_shots/
+
+# 向量库二进制缓存（由 npm run vectors:export 生成，体积大不入库）
+/data/vectors.bin
+/data/vectors.meta.json
+
+# AI 生成图本地落盘（运行期产物）
+/public/creations/

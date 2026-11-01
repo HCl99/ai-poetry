@@ -1,5 +1,7 @@
 // 内存向量库：从 chunks 表加载 poem 向量，余弦相似度 topK 检索
 // 向量化是离线脚本持续写入的，这里带 TTL 缓存定期刷新
+import fs from 'fs';
+import path from 'path';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
@@ -22,9 +24,70 @@ interface Store {
 
 const TTL_MS = 5 * 60 * 1000;
 
+const CACHE_BIN = path.join(process.cwd(), 'data', 'vectors.bin');
+const CACHE_META = path.join(process.cwd(), 'data', 'vectors.meta.json');
+
 const g = globalThis as unknown as { __poemVectorStore?: Promise<Store> };
 
+/**
+ * 本地二进制缓存加载（npm run vectors:export 生成）。
+ * 相比从 MySQL 拉 34.4 万行、解析约 1.5GB JSON 文本，读 700MB 二进制 + 30MB 元数据快一个量级。
+ * 缓存缺失或规模与库内不一致（向量有增删）时返回 null，由调用方回退数据库加载。
+ */
+async function loadFromCache(): Promise<Store | null> {
+  try {
+    await fs.promises.access(CACHE_BIN);
+    await fs.promises.access(CACHE_META);
+  } catch {
+    return null;
+  }
+  const t0 = Date.now();
+  try {
+    const [metaRaw, binBuf, total] = await Promise.all([
+      fs.promises.readFile(CACHE_META, 'utf8'),
+      fs.promises.readFile(CACHE_BIN),
+      prisma.chunk.count({
+        where: { chunkType: 'poem', embedding: { not: null }, refId: { not: null } },
+      }),
+    ]);
+    const cached = JSON.parse(metaRaw) as {
+      dims: number;
+      count: number;
+      ids: string[];
+      meta: Record<string, { title: string; author: string; dynasty: string }>;
+    };
+    if (cached.count !== total || cached.ids.length !== total) {
+      console.warn(`[vectorStore] 缓存 ${cached.count} 条与库内 ${total} 条不一致，回退数据库加载`);
+      return null;
+    }
+    if (cached.dims <= 0 || binBuf.byteLength !== total * cached.dims * 4) {
+      console.warn('[vectorStore] 缓存维度不匹配，回退数据库加载');
+      return null;
+    }
+    let mat: Float32Array;
+    if (binBuf.byteOffset % 4 === 0) {
+      mat = new Float32Array(binBuf.buffer, binBuf.byteOffset, total * cached.dims);
+    } else {
+      const copy = new ArrayBuffer(binBuf.byteLength);
+      Buffer.from(copy).set(binBuf);
+      mat = new Float32Array(copy);
+    }
+
+    const idIdx = new Map<string, number>();
+    cached.ids.forEach((id, i) => idIdx.set(id, i));
+    const meta = new Map(Object.entries(cached.meta));
+    console.log(`[vectorStore] cache loaded ${total} vectors (${cached.dims}d) in ${Date.now() - t0}ms`);
+    return { ids: cached.ids, idIdx, mat, dims: cached.dims, meta, loadedAt: Date.now() };
+  } catch (e) {
+    console.warn('[vectorStore] 缓存读取失败，回退数据库加载：', (e as Error)?.message);
+    return null;
+  }
+}
+
 async function load(): Promise<Store> {
+  const cached = await loadFromCache();
+  if (cached) return cached;
+
   const t0 = Date.now();
   // 分页加载：单次 findMany 拉全量（~800MB 文本）会触发 Prisma NAPI 转换失败
   const PAGE = 5000;

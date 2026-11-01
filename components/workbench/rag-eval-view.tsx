@@ -76,6 +76,44 @@ export function RagEvalView() {
         </p>
       </div>
 
+      {/* 技术自证：长尾分段评测（客观指标，对照全库核验） */}
+      <div className="paper-card p-6">
+        <h2 className="mb-1 flex items-center gap-2 font-ui text-[15px] font-medium text-ink-deep">
+          <FlaskConical className="h-4 w-4 text-sepia" /> 长尾知识问答：有检索 vs 无检索
+        </h2>
+        <p className="mb-4 font-ui text-xs text-ink-soft">
+          20 位冷门诗人（小传不足 100 字、库内仅存 4~300 首）× 2 组回答。篇名归属与诗句均对照全库核验，是客观指标而非盲评。
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] border-collapse text-left">
+            <thead>
+              <tr className="font-ui text-xs text-ink-soft">
+                <th className="py-2 pr-3 font-normal">指标</th>
+                <th className="py-2 pr-3 font-normal">无检索基线</th>
+                <th className="py-2 font-normal">本系统（RAG）</th>
+              </tr>
+            </thead>
+            <tbody className="font-ui text-sm">
+              {[
+                { k: '篇名正确归属', base: '0 / 60（0.0%）', rag: '54 / 61（88.5%）' },
+                { k: '杜撰篇名率', base: '31.7%', rag: '8.2%' },
+                { k: '诗句可验证率', base: '0.0%（0/404）', rag: '42.8%（155/362）' },
+                { k: '盲评整体质量', base: '6.35', rag: '6.6（胜 11 / 平 1 / 负 8）' },
+              ].map((r) => (
+                <tr key={r.k} className="border-t" style={{ borderColor: 'var(--border-c)' }}>
+                  <td className="py-2.5 pr-3 text-ink-deep">{r.k}</td>
+                  <td className="py-2.5 pr-3" style={{ color: '#A67C7C' }}>{r.base}</td>
+                  <td className="py-2.5" style={{ color: '#6B8E7B' }}>{r.rag}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 font-ui text-[11px] text-ink-soft">
+          数据来源：scripts/rag_longtail_test.py（种子 7，可复跑）· 报告 docs/rag_longtail_report.md · 下方面板可现场复跑另一套「引用硬约束」闭环
+        </p>
+      </div>
+
       {/* 闭环实验基线 */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[

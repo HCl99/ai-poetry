@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+import os
+from pathlib import Path as _Path
+
+def _load_project_env():
+    _p = _Path(__file__).resolve().parent.parent / ".env"
+    if not _p.exists():
+        return
+    for _line in _p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
+_load_project_env()
 """语料标点/标题质量修复（幂等，可重复执行）
 
 背景：全唐诗/全宋诗/全元曲导入库中标点存在系统性瑕疵，影响「宋元词曲被读成唐诗」的观感：
@@ -18,7 +32,7 @@ import json
 import re
 import pymysql
 
-DB = dict(host='127.0.0.1', user='root', password='REDACTED_DB_PASSWORD',
+DB = dict(host='127.0.0.1', user='root', password=os.getenv("MYSQL_PASSWORD", ""),
           database='ai_poetry', charset='utf8mb4')
 
 TRAIL = '？！，；：、'

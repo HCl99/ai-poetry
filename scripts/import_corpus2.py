@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+import os
+from pathlib import Path as _Path
+
+def _load_project_env():
+    _p = _Path(__file__).resolve().parent.parent / ".env"
+    if not _p.exists():
+        return
+    for _line in _p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
+_load_project_env()
 """补充导入：五代诗词(子目录)、纳兰性德、曹操诗集"""
 import json
 from pathlib import Path
@@ -9,7 +23,7 @@ from opencc import OpenCC
 ROOT = Path(r'c:\Users\Lenovo\Desktop\传智杯\chinese-poetry-master')
 cc = OpenCC('t2s')
 
-conn = pymysql.connect(host='127.0.0.1', user='root', password='REDACTED_DB_PASSWORD',
+conn = pymysql.connect(host='127.0.0.1', user='root', password=os.getenv("MYSQL_PASSWORD", ""),
                        database='ai_poetry', charset='utf8mb4', autocommit=False)
 cur = conn.cursor()
 

@@ -1,8 +1,22 @@
 # -*- coding: utf-8 -*-
+import os
+from pathlib import Path as _Path
+
+def _load_project_env():
+    _p = _Path(__file__).resolve().parent.parent / ".env"
+    if not _p.exists():
+        return
+    for _line in _p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
+_load_project_env()
 """按 poet_bios.name 回填 poems.dynasty，并报告结果"""
 import pymysql
 
-conn = pymysql.connect(host='127.0.0.1', user='root', password='REDACTED_DB_PASSWORD',
+conn = pymysql.connect(host='127.0.0.1', user='root', password=os.getenv("MYSQL_PASSWORD", ""),
                        database='ai_poetry', charset='utf8mb4')
 cur = conn.cursor()
 

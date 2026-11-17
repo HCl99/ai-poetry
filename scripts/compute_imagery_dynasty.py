@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+import os
+from pathlib import Path as _Path
+
+def _load_project_env():
+    _p = _Path(__file__).resolve().parent.parent / ".env"
+    if not _p.exists():
+        return
+    for _line in _p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
+_load_project_env()
 """一次性预计算：意象（当前 50 个）× 各朝代的「含该意象诗数」与例句 → data/imagery-dynasty.json
 口径与 imagery.count 一致：一首诗任意句（简体正文）含该字即计 1。
 """
@@ -14,7 +28,7 @@ def main():
     t0 = time.time()
     conn = pymysql.connect(
         host="127.0.0.1", port=3306, user="root",
-        password="REDACTED_DB_PASSWORD", database="ai_poetry", charset="utf8mb4",
+        password=os.getenv("MYSQL_PASSWORD", ""), database="ai_poetry", charset="utf8mb4",
     )
     cur = conn.cursor()
 

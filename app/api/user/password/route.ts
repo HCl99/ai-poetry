@@ -1,11 +1,12 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
 /** F3 个人中心：修改密码（需验证旧密码） */
-export async function PUT(req: Request) {
+async function PUT_impl(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
 
@@ -29,3 +30,5 @@ export async function PUT(req: Request) {
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash, passwordChangedAt: new Date() } });
   return Response.json({ ok: true, reLogin: true });
 }
+
+export const PUT = withApi(PUT_impl);

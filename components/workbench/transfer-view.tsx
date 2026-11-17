@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Download, Volume2, Square, Image as ImageIcon, Share2, ScrollText } from 'lucide-react';
+import { Sparkles, Download, Volume2, Square, Share2, ScrollText, Cpu } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { useSpeech } from '@/lib/use-speech';
 import { AiBadge } from '@/components/ai-badge';
@@ -9,6 +9,17 @@ import { sseEvents } from '@/lib/sse';
 import { ShareCard, downloadSharePng } from './share-card';
 import { ScrollCard } from './scroll-card';
 import { SpeechSettingsPanel } from './speech-panel';
+import { checkMeter, meterFormFor, type MeterReport } from '@/lib/meter';
+import type { EmotionKey } from '@/lib/voice-presets';
+
+/** 生成风格 → 朗读情感音色，让朗读语气与诗人气质一致 */
+const EMOTION_BY_STYLE: Record<string, EmotionKey> = {
+  libai: 'heroic',
+  sushi: 'broad',
+  wanyue: 'gentle',
+  wangwei: 'serene',
+  dufu: 'melancholy',
+};
 
 /** 风格 ↔ 体裁一一对应：唐代诗人作诗（绝句/律诗），宋代词人作词（指定词牌） */
 const STYLES = [
@@ -21,6 +32,7 @@ const STYLES = [
 
 const EXAMPLE = '下雨天一个人走回家，路上想起了远方的朋友';
 
+
 interface Meta { style: string; form: string; model: string; exemplars?: { title: string; score: number }[] }
 interface DoneInfo { latencyMs: number; saved: boolean }
 /** 格律后校验报告（done 事件精简版）：pass/rhymeOk/pingzeOk + 每句违规描述 */
@@ -32,17 +44,13 @@ export function TransferView() {
   const [loading, setLoading] = useState(false);
   const [poem, setPoem] = useState('');
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [stepText, setStepText] = useState('');
+  const [steps, setSteps] = useState<{ label: string; detail: string }[]>([]);
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [meter, setMeter] = useState<MeterInfo | null>(null);
+  const [clientMeter, setClientMeter] = useState<MeterReport | null>(null);
   const [error, setError] = useState('');
   const speech = useSpeech();
-  const [inkUrl, setInkUrl] = useState('');
-  const [inkLoading, setInkLoading] = useState(false);
-  const [inkError, setInkError] = useState(false);
-  const [inkZoom, setInkZoom] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [shareNoInk, setShareNoInk] = useState(false);
   const [scrollExporting, setScrollExporting] = useState(false);
   const { msg, show } = useToast();
   const abortRef = useRef<AbortController | null>(null);
@@ -67,35 +75,24 @@ export function TransferView() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  /** 朗读生成诗词（跟随全局语速/音色设置），再次点击停止 */
+  /** 朗读生成诗词（跟随全局语速/音色设置，按所选诗人风格选择情感音色，逐句断句朗读） */
   function speak() {
     if (!speech.supported) { show('当前浏览器不支持语音合成'); return; }
     if (!poem) return;
-    speech.speak('transfer-poem', poem);
+    const lines = poem.split('\n').map((l) => l.trim()).filter(Boolean);
+    speech.speakLines('transfer-poem', lines, EMOTION_BY_STYLE[style]);
   }
 
-  /** CogView-3-Flash 生成水墨意境图 */
-  async function inkpaint() {
-    if (inkLoading || !poem) return;
-    setInkLoading(true);
-    setInkError(false);
-    setInkUrl('');
-    try {
-      const r = await fetch('/api/inkpaint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: `${meta?.style || '古风'}诗词意境：${poem}` }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || '生成失败');
-      setInkUrl(d.url);
-      show('水墨意境图已生成');
-    } catch (e: any) {
-      setInkError(true);
-      show(e.message || '意境图生成失败，可重试');
-    } finally {
-      setInkLoading(false);
-    }
+  /** 端侧格律校验：纯浏览器本地运行，无需网络请求（端侧智能引擎） */
+  function runClientMeter() {
+    if (!poem) return;
+    const lines = poem.split('\n').map((l) => l.replace(/[，。！？、；：\s]/g, '')).filter(Boolean);
+    if (lines.length === 0) return;
+    const shape = lines.map((l) => l.length);
+    const form = meterFormFor(shape, '诗');
+    const report = checkMeter(lines, form);
+    setClientMeter(report);
+    show(report.pass ? '端侧格律校验通过 ✓' : '端侧格律校验完成，存在待优化处 ⚠');
   }
 
   async function generate() {
@@ -110,11 +107,8 @@ export function TransferView() {
     setMeta(null);
     setDoneInfo(null);
     setMeter(null);
-    setStepText('');
-    setInkUrl('');
-    setInkError(false);
-    setInkZoom(false);
-    setShareNoInk(false);
+    setClientMeter(null);
+    setSteps([]);
     speech.stop();
     try {
       const r = await fetch('/api/transfer', {
@@ -129,7 +123,7 @@ export function TransferView() {
       }
       for await (const { event, data } of sseEvents(r)) {
         if (event === 'meta') setMeta(data);
-        else if (event === 'step') setStepText(data.detail || data.label || '');
+        else if (event === 'step') setSteps((prev) => [...prev, { label: data.label || '', detail: data.detail || '' }]);
         else if (event === 'delta') setPoem((p) => p + (data.text || ''));
         else if (event === 'error') throw new Error(data.error || '生成失败');
         else if (event === 'done') {
@@ -195,48 +189,24 @@ export function TransferView() {
     const styleName = STYLES.find((s) => s.key === style)?.name || '古风';
     try {
       await downloadSharePng(shareRef.current, `分享-风格迁移-${styleName}-${Date.now()}.png`);
-      show(shareNoInk ? '已导出分享图（意境图跨域受限，未包含）' : '已导出水墨分享图');
+      show('已导出分享图');
     } catch {
-      // 意境图跨域导致画布受污染时，降级为不含图重试一次
-      if (inkUrl && !shareNoInk) {
-        setShareNoInk(true);
-        await new Promise((r) => setTimeout(r, 100));
-        try {
-          await downloadSharePng(shareRef.current, `分享-风格迁移-${styleName}-${Date.now()}.png`);
-          show('已导出分享图（意境图跨域受限，未包含）');
-        } catch {
-          show('分享图导出失败，请重试');
-        }
-      } else {
-        show('分享图导出失败，请重试');
-      }
+      show('分享图导出失败，请重试');
     } finally {
       setSharing(false);
     }
   }
 
-  /** 导出诗画长卷 PNG：意境图 + 竖排右起诗句 + 题签印章 */
+  /** 导出诗画长卷 PNG：竖排右起诗句 + 题签印章 */
   async function exportScroll() {
     if (!scrollRef.current || !poem || scrollExporting) return;
     setScrollExporting(true);
     const styleName = STYLES.find((s) => s.key === style)?.name || '古风';
     try {
       await downloadSharePng(scrollRef.current, `诗画长卷-${styleName}-${Date.now()}.png`);
-      show(shareNoInk ? '已导出诗画长卷（意境图跨域受限，未包含）' : '已导出诗画长卷');
+      show('已导出诗画长卷');
     } catch {
-      if (inkUrl && !shareNoInk) {
-        // 意境图跨域污染画布：降级为无图长卷重试一次
-        setShareNoInk(true);
-        await new Promise((r) => setTimeout(r, 100));
-        try {
-          await downloadSharePng(scrollRef.current, `诗画长卷-${styleName}-${Date.now()}.png`);
-          show('已导出诗画长卷（意境图跨域受限，未包含）');
-        } catch {
-          show('长卷导出失败，请重试');
-        }
-      } else {
-        show('长卷导出失败，请重试');
-      }
+      show('长卷导出失败，请重试');
     } finally {
       setScrollExporting(false);
     }
@@ -291,7 +261,7 @@ export function TransferView() {
                 generate();
               }
             }}
-            placeholder="写下你想转化为古诗词的现代文…（Enter 生成，Shift+Enter 换行）"
+            placeholder="写一个场景或心情，例如：深夜独坐窗前，看见月亮想起故乡（Enter 生成，Shift+Enter 换行）"
             className="min-h-[120px] w-full resize-y rounded-lg border-[1.5px] border-c bg-white/60 p-4 font-ui text-sm leading-relaxed outline-none transition-ink focus:border-ink-deep"
           />
           <div className="mt-2 flex items-center justify-between">
@@ -300,6 +270,11 @@ export function TransferView() {
             </button>
             <span className="font-ui text-xs text-ink-soft/70">{text.length} 字</span>
           </div>
+          {text.trim().length > 0 && text.trim().length < 6 && (
+            <p className="mt-2 font-ui text-xs" style={{ color: '#A67C7C' }}>
+              再写一点：至少 6 个字，说明场景或心情（只写「月亮」模型无从提炼，只能瞎猜）
+            </p>
+          )}
 
           {error && (
             <div className="mt-4 rounded-lg px-3 py-2 text-center font-ui text-sm" style={{ background: 'rgba(166,124,124,0.1)', color: '#A67C7C' }}>
@@ -319,9 +294,10 @@ export function TransferView() {
           ) : (
             <button
               onClick={generate}
-              className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover"
+              disabled={text.trim().length < 6}
+              className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 hover:shadow-ink-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
               style={{ background: 'var(--btn-grad)' }}
-              title="AI 逐句炼字生成古风诗词（Enter）"
+              title={text.trim().length < 6 ? '至少写 6 个字，说明场景或心情' : 'AI 逐句炼字生成古风诗词（Enter）'}
             >
               <Sparkles className="h-4 w-4" /> 开始风格迁移
             </button>
@@ -338,7 +314,34 @@ export function TransferView() {
             <div className="flex flex-1 flex-col items-center justify-center py-16">
               <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
               <p className="mt-4 font-ui text-sm text-ink-soft">AI 正在涵泳构思…</p>
-              <p className="mt-1 font-ui text-xs text-ink-soft/70">{stepText || 'RAG 向量检索风格范例 · 逐句炼字'}</p>
+
+              {/* 阶段条：检索 → 起草 → 校验 → 第 N 稿重写 */}
+              {steps.length > 0 && (
+                <ol className="mt-5 w-full max-w-md space-y-2 px-4">
+                  {steps.map((s, i) => {
+                    const isLast = i === steps.length - 1;
+                    return (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <span
+                          className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+                          style={{
+                            background: isLast ? 'var(--sepia)' : 'var(--sage)',
+                            color: 'var(--paper-light)',
+                          }}
+                        >
+                          {isLast ? '…' : '✓'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className={`font-ui text-xs ${isLast ? 'font-medium text-ink-deep' : 'text-ink-soft'}`}>{s.label}</p>
+                          {s.detail && (
+                            <p className="mt-0.5 truncate font-ui text-[11px] text-ink-soft/70" title={s.detail}>{s.detail}</p>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
             </div>
           )}
 
@@ -358,6 +361,24 @@ export function TransferView() {
                   {loading && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
                 </p>
               </div>
+              {/* 端侧格律校验结果面板（浏览器本地即时计算，无网络请求） */}
+              {clientMeter && (
+                <div className="mt-3 rounded-lg p-3" style={{ background: 'var(--paper-light)', border: '1px dashed var(--border-c)' }}>
+                  <div className="mb-1.5 flex items-center gap-1.5 font-ui text-[11px] font-medium" style={{ color: clientMeter.pass ? 'var(--sage)' : 'var(--sepia)' }}>
+                    <Cpu className="h-3 w-3" /> 端侧格律校验（浏览器本地 · 中华新韵）
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 font-ui text-[11px] text-ink-mid">
+                    <span>押韵 {clientMeter.rhymeOk ? '✓' : '✗'}</span>
+                    <span>平仄 {clientMeter.pingzeOk ? '✓' : '✗'}</span>
+                    {clientMeter.unknownChars.length > 0 && <span>未收录字 {clientMeter.unknownChars.join('')}</span>}
+                  </div>
+                  {clientMeter.lines.some((l) => l.issues.length > 0) && (
+                    <ul className="mt-1.5 space-y-0.5 font-ui text-[11px] text-ink-soft">
+                      {clientMeter.lines.flatMap((l, i) => l.issues.map((x) => <li key={`${i}-${x}`}>第{i + 1}句：{x}</li>))}
+                    </ul>
+                  )}
+                </div>
+              )}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 font-ui text-xs text-ink-soft">
                 <span className="inline-flex items-center gap-1.5">
                   {meta?.style ?? ''} · {meta?.form ?? '古诗词'}
@@ -381,6 +402,17 @@ export function TransferView() {
                     >
                       {meter.pass ? '✓ 格律校验' : '⚠ 格律存疑'}
                     </span>
+                  )}
+                  {/* 端侧格律校验：纯浏览器本地运行，无需网络请求 */}
+                  {poem && !loading && (
+                    <button
+                      onClick={runClientMeter}
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-ui text-[11px] transition-ink hover:bg-paper-dark"
+                      style={{ color: 'var(--muted-blue)', border: '1px dashed var(--border-c)' }}
+                      title="在浏览器端即时校验格律，无需网络请求"
+                    >
+                      <Cpu className="h-3 w-3" /> 端侧校验
+                    </button>
                   )}
                 </span>
                 {doneInfo ? (
@@ -416,15 +448,6 @@ export function TransferView() {
                     <SpeechSettingsPanel settings={speech.settings} voices={speech.voices} onChange={speech.updateSettings} />
                   </span>
                   <button
-                    onClick={inkpaint}
-                    disabled={inkLoading}
-                    className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
-                    title="CogView-3 生成水墨意境图"
-                  >
-                    {inkLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <ImageIcon className="h-3.5 w-3.5" />}
-                    {inkLoading ? '绘图中…' : '意境图'}
-                  </button>
-                  <button
                     onClick={exportShare}
                     disabled={sharing}
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
@@ -437,7 +460,7 @@ export function TransferView() {
                     onClick={exportScroll}
                     disabled={scrollExporting}
                     className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3 py-1.5 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
-                    title="导出诗画长卷 PNG：竖排右起诗句 + 题签印章，可含意境图"
+                    title="导出诗画长卷 PNG：竖排右起诗句 + 题签印章"
                   >
                     {scrollExporting ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <ScrollText className="h-3.5 w-3.5" />}
                     诗画长卷
@@ -448,50 +471,6 @@ export function TransferView() {
                   >
                     <Download className="h-3.5 w-3.5" /> 导出 Markdown 报告
                   </button>
-                </div>
-              )}
-              {(inkLoading || inkError || inkUrl) && (
-                <div className="mt-3 overflow-hidden rounded-lg anim-fade-up" style={{ border: '1px solid var(--border-c)' }}>
-                  {inkLoading && (
-                    <div className="flex flex-col items-center justify-center py-14" style={{ background: 'var(--inset)' }}>
-                      <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
-                      <p className="mt-3 font-ui text-xs text-ink-soft">CogView-3 正在晕染墨色，约 20 秒…</p>
-                    </div>
-                  )}
-                  {inkError && !inkLoading && (
-                    <div className="flex flex-col items-center justify-center py-10" style={{ background: 'var(--inset)' }}>
-                      <ImageIcon className="h-8 w-8 text-ink-soft/40" strokeWidth={1.5} />
-                      <p className="mt-2 font-ui text-xs" style={{ color: '#A67C7C' }}>意境图生成失败</p>
-                      <button
-                        onClick={inkpaint}
-                        className="mt-3 rounded-lg px-4 py-1.5 font-ui text-xs text-white transition-ink hover:-translate-y-0.5"
-                        style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
-                      >
-                        重试
-                      </button>
-                    </div>
-                  )}
-                  {inkUrl && !inkLoading && (
-                    <>
-                      <button onClick={() => setInkZoom(true)} className="block w-full cursor-zoom-in" title="点击放大">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={inkUrl} alt="水墨意境图" className="w-full object-cover" />
-                      </button>
-                      <p className="flex items-center justify-center gap-3 bg-white/60 px-3 py-1.5 font-ui text-xs text-ink-soft">
-                        <span>CogView-3-Flash 水墨意境图 · 点击放大</span>
-                        <a href={inkUrl} target="_blank" rel="noreferrer" className="text-muted-blue transition-ink hover:underline">查看原图</a>
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-              {inkZoom && inkUrl && (
-                <div
-                  className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/70 p-6 anim-fade-in"
-                  onClick={() => setInkZoom(false)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={inkUrl} alt="水墨意境图（放大）" className="max-h-full max-w-full rounded-lg" style={{ boxShadow: '0 16px 64px rgba(0,0,0,0.5)' }} />
                 </div>
               )}
             </div>
@@ -507,7 +486,6 @@ export function TransferView() {
             subtitle={`现代文 → 古风诗词 · ${meta?.form || '古诗词'}`}
             poemLines={poem.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 8)}
             note={text.length > 90 ? `${text.slice(0, 90)}…` : text}
-            image={inkUrl && !shareNoInk ? inkUrl : undefined}
             footer={`${meta?.model || 'glm-4-flash'} · ${new Date().toLocaleDateString('zh-CN')}`}
           />
         </div>
@@ -520,7 +498,6 @@ export function TransferView() {
             subtitle="诗画长卷 · AI 风格迁移"
             poemLines={poem.split('\n')}
             note={text.length > 90 ? `${text.slice(0, 90)}…` : text}
-            image={inkUrl && !shareNoInk ? inkUrl : undefined}
             footer={`${meta?.model || 'glm-4-flash'} · ${new Date().toLocaleDateString('zh-CN')}`}
           />
         </div>

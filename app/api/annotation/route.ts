@@ -1,22 +1,34 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
-import { hybridCoarse, vectorCorpusSize, type VectorHit } from '@/lib/vectorStore';
-import { rerankTopN } from '@/lib/reranker';
+import { vectorCorpusSize } from '@/lib/vectorStore';
 import { detectImageryChars } from '@/lib/imageryDetect';
+import { retrieveRelatedPoems } from '@/lib/annotationRetrieval';
+import { runAnnotationAgent } from '@/lib/agents/orchestrator';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { ANNOTATION_SECTIONS, parseAnnotationSections, withFallback } from '@/lib/sections';
 import { screenInput, createOutputGuard, SAFE_REPLY } from '@/lib/content-filter';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
+
+/* ================= 注解结果内存缓存（同诗二次注解秒级返回） ================= */
+interface AnnotationCacheEntry {
+  dims: { key: string; tag: string; content: string; citation: string }[];
+  relatedMeta: { id: string; title: string; author: string; dynasty: string; score?: number | null }[];
+  model: string;
+  imageryChars: string[];
+}
+const _cacheGlobal = globalThis as unknown as { __annotationCache?: Map<string, AnnotationCacheEntry> };
+function annotationCache(): Map<string, AnnotationCacheEntry> {
+  if (!_cacheGlobal.__annotationCache) _cacheGlobal.__annotationCache = new Map();
+  return _cacheGlobal.__annotationCache;
+}
+const CACHE_MAX = 200; // 最多缓存 200 首，LRU 由 Map 插入序近似实现
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -65,53 +77,14 @@ export async function POST(req: Request) {
           const corpusSize = await vectorCorpusSize();
           const useVector = !!queryVec && corpusSize > 0;
 
-          type RelatedPoem = { id: string; title: string; author: string; dynasty: string; body: string; score: number | null; rerankScore?: number };
-          let related: RelatedPoem[] = [];
-          if (useVector) {
-            const coarse = await hybridCoarse(queryText, queryVec!, 20, {
-              excludeId: poemId,
-              filter: (m) => !(m.title === poem.title && m.author === poem.author),
-            });
-            if (coarse.length) {
-              const bodies = await prisma.poem.findMany({
-                where: { id: { in: coarse.map((h) => h.id) } },
-                select: { id: true, paragraphsSimp: true },
-              });
-              const bodyMap = new Map(bodies.map((b) => [b.id, ((b.paragraphsSimp as string[] | null) || []).join('')]));
-              const reranked = await rerankTopN(
-                queryText,
-                coarse.map((h) => ({ ...h, body: bodyMap.get(h.id) || '' })),
-                (item) => `《${item.title}》${item.author}：${item.body}`,
-                5,
-              );
-              related = reranked
-                ? reranked.map((r) => ({ ...r.item, rerankScore: r.score }))
-                : coarse.slice(0, 5).map((h) => ({ ...h, body: bodyMap.get(h.id) || '', score: h.score }));
-            }
-          }
-          if (related.length === 0) {
-            const imageryRows = await prisma.poemImagery.findMany({
-              where: { poemId },
-              orderBy: { imageryChar: 'asc' },
-              take: 3,
-            });
-            const chars = imageryRows.map((r) => r.imageryChar);
-            if (chars.length) {
-              const rows = await prisma.poemImagery.findMany({
-                where: { imageryChar: { in: chars }, NOT: { poemId } },
-                take: 8,
-                include: { poem: { select: { id: true, title: true, author: true, dynasty: true, paragraphsSimp: true } } },
-              });
-              const seen = new Set<string>();
-              related = rows
-                .filter((r) => !seen.has(r.poemId) && seen.add(r.poemId))
-                .slice(0, 5)
-                .map((r) => ({
-                  id: r.poem.id, title: r.poem.title, author: r.poem.author, dynasty: r.poem.dynasty,
-                  body: ((r.poem.paragraphsSimp as string[] | null) || []).join(''), score: null,
-                }));
-            }
-          }
+          const { related } = await retrieveRelatedPoems({
+            poemId,
+            title: poem.title,
+            author: poem.author,
+            queryText,
+            queryVec,
+            useVector,
+          });
           const bio = await prisma.poetBio.findFirst({ where: { name: poem.author } });
           send('step', {
             label: '追问检索完成',
@@ -194,105 +167,33 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `相似诗篇：\n${
       const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
 
       try {
-        /* ---- 阶段 1：解析正文 + 语义向量化 ---- */
-        send('step', { label: '解析诗词正文', detail: `${poem.dynasty} · ${poem.author}` });
-
-        const queryText = `《${poem.title}》${poem.author}：${orig.replace(/\n/g, '')}`.slice(0, 400);
-        const queryVec = await embedText(queryText);
-        const corpusSize = await vectorCorpusSize();
-        const useVector = !!queryVec && corpusSize > 0;
-        send('step', {
-          label: '向量化诗词语义',
-          detail: useVector
-            ? `BGE-small-zh · 512 维 · 向量库 ${corpusSize} 篇`
-            : '向量服务不可用，降级为意象共现检索',
-        });
-
-        /* ---- 阶段 2：语义检索（向量粗排 → CrossEncoder 精排，失败回退意象共现） ---- */
-        // score: 粗排余弦相似度（展示用，量纲稳定）；rerankScore: 精排相关度（排序依据）
-        type RelatedPoem = { id: string; title: string; author: string; dynasty: string; body: string; score: number | null; rerankScore?: number };
-        let related: RelatedPoem[] = [];
-        let rerankApplied = false;
-
-        if (useVector) {
-          // 第一阶段：混合检索粗排 top20（向量 0.7 + 关键词 0.3 融合，强化人名/地名专有名词召回）
-          const coarse = await hybridCoarse(queryText, queryVec!, 20, {
-            excludeId: poemId,
-            filter: (m) => !(m.title === poem.title && m.author === poem.author),
-          });
-          if (coarse.length) {
-            const bodies = await prisma.poem.findMany({
-              where: { id: { in: coarse.map((h) => h.id) } },
-              select: { id: true, paragraphsSimp: true },
-            });
-            const bodyMap = new Map(bodies.map((b) => [b.id, ((b.paragraphsSimp as string[] | null) || []).join('')]));
-            // 第二阶段：CrossEncoder 精排（粗排结果重排序，取 top5）
-            const reranked = await rerankTopN(
-              queryText,
-              coarse.map((h) => ({ ...h, body: bodyMap.get(h.id) || '' })),
-              (item) => `《${item.title}》${item.author}：${item.body}`,
-              5,
-            );
-            if (reranked) {
-              related = reranked.map((r) => ({ ...r.item, rerankScore: r.score }));
-              rerankApplied = true;
-            } else {
-              // reranker 不可用时降级为粗排 top5
-              related = coarse.slice(0, 5).map((h) => ({ ...h, body: bodyMap.get(h.id) || '', score: h.score }));
-            }
-          }
+        /* ---- 缓存命中：同诗二次注解秒级返回 ---- */
+        const cached = annotationCache().get(poemId);
+        if (cached) {
+          send('step', { label: '命中注解缓存', detail: `《${poem.title}》· 跳过检索与生成` });
+          const dimsMeta = cached.dims.map((d) => ({ key: d.key, tag: d.tag, citation: d.citation }));
+          send('meta', { model: cached.model, dims: dimsMeta, related: cached.relatedMeta, hasBio: false });
+          // 一次性回放缓存内容（前端逐字流式由 delta 拼接，这里直接发全文）
+          const fullText = cached.dims.map((d) => `【${d.tag}】\n${d.content}`).join('\n\n');
+          send('delta', { text: fullText });
+          send('done', { latencyMs: 120, dimensions: cached.dims, model: cached.model, imageryChars: cached.imageryChars, degraded: false, cached: true });
+          return;
         }
-        if (related.length === 0) {
-          // 降级：意象共现检索
-          const imageryRows = await prisma.poemImagery.findMany({
-            where: { poemId },
-            orderBy: { imageryChar: 'asc' },
-            take: 3,
-          });
-          const chars = imageryRows.map((r) => r.imageryChar);
-          if (chars.length) {
-            const rows = await prisma.poemImagery.findMany({
-              where: { imageryChar: { in: chars }, NOT: { poemId } },
-              take: 8,
-              include: {
-                poem: { select: { id: true, title: true, author: true, dynasty: true, paragraphsSimp: true } },
-              },
-            });
-            const seen = new Set<string>();
-            related = rows
-              .filter((r) => !seen.has(r.poemId) && seen.add(r.poemId))
-              .slice(0, 5)
-              .map((r) => ({
-                id: r.poem.id,
-                title: r.poem.title,
-                author: r.poem.author,
-                dynasty: r.poem.dynasty,
-                body: ((r.poem.paragraphsSimp as string[] | null) || []).join(''),
-                score: null,
-              }));
-          }
-        }
-        send('step', {
-          label: useVector ? `RAG · ${rerankApplied ? '混合检索+精排' : '混合语义检索'}` : '意象共现检索',
-          detail: related.length
-            ? related.map((r) => {
-                if (rerankApplied) return `《${r.title}》 精排 ${r.rerankScore}`;
-                return `《${r.title}》${r.score != null ? ` 相似度 ${r.score}` : ''}`;
-              }).join('；')
-            : '未检索到相似诗篇',
-        });
 
-        /* ---- 阶段 3：诗人小传 ---- */
-        const bio = await prisma.poetBio.findFirst({ where: { name: poem.author } });
-        send('step', {
-          label: '匹配诗人小传',
-          detail: bio ? `已载入《${poem.author}》传记资料` : '暂无小传，使用通行注本',
-        });
+        /* ---- 阶段 1-3：Agent 编排（plan → act → observe，最多 4 轮） ---- */
+        // 由编排器自行决定并执行：混合语义检索、诗人小传、意象频次、格律校验
+        const lines = orig.split('\n').map((s) => s.trim()).filter(Boolean);
+        const bundle = await runAnnotationAgent(
+          { poemId, title: poem.title, author: poem.author, dynasty: poem.dynasty, body: orig, lines },
+          (e) => send('step', { label: e.label, detail: e.detail, tool: e.tool, ms: e.ms, hits: e.hits }),
+        );
+        const { related, rerankApplied, useVector, imageryCtx, allowExternalCitation, meter } = bundle;
 
         const relatedCtx = related
           .map((r) => `《${r.title}》〔${r.dynasty}〕${r.author}：${r.body}`)
           .join('\n');
-        const bioCtx = bio?.bioSimp?.slice(0, 260) || bio?.bioDesc?.slice(0, 260) || '';
+        const bioCtx = bundle.bioCtx;
+        const hasBio = !!bioCtx;
         const existing = poem.annotations;
 
         /* ---- 引用来源（真实检索数据） ---- */
@@ -307,8 +208,8 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `相似诗篇：\n${
             : useVector
               ? '向量语义检索'
               : '意象共现库',
-          qinggan: bio ? `诗人小传 · 《${poem.author}》传记资料` : '诗人小传库',
-          geli: '格律分析引擎',
+          qinggan: hasBio ? `诗人小传 · 《${poem.author}》传记资料` : '诗人小传库',
+          geli: meter ? `格律校验引擎 · 中华新韵（本地计算，${meter.form}）` : '格律分析引擎',
         };
         // 引用归因：检索到的诗题集合，前端用于高亮正文中的《诗题》引用
         const retrievedTitles = related.map((r) => r.title);
@@ -323,28 +224,38 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `相似诗篇：\n${
           author: r.author,
           dynasty: r.dynasty,
           score: r.score,
+          lines: r.lines,
+          matchedLine: r.matchedLine,
         }));
 
-        send('meta', { model, dims: dimsMeta, related: relatedMeta, hasBio: !!bio });
+        send('meta', { model, dims: dimsMeta, related: relatedMeta, hasBio });
 
         /* ---- 阶段 4：大模型流式生成（按【小节】标记纯文本输出） ---- */
+        // 格律硬约束：本地引擎结果为确定性事实，模型不得自行修改/编造/矛盾
+        const meterFacts = meter
+          ? `【格律事实（**本地校验引擎，中华新韵，确定性事实，不得修改或矛盾**）】\n` +
+            `体裁：${meter.form}\n` +
+            `结论：${meter.pass ? '押韵与关键位置平仄未见明显违例（宽检）' : meter.summary}\n` +
+            `⚠️ 你在格律分析小节中**必须严格引用上述事实**，不得自行编造体裁、平仄或押韵结论，不得给出与之矛盾的判断。`
+          : '';
+
         const prompt = `你是一位资深古典文学研究专家。请对下面这首诗进行四维度学术注解。
 
 【诗词】《${poem.title}》〔${poem.dynasty}〕${poem.author}
 ${orig}
 
 【参考上下文（知识库检索结果）】
-${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇（向量检索）：\n${relatedCtx}\n` : ''}${existing?.fanyi ? `白话译文参考：${existing.fanyi.slice(0, 300)}\n` : ''}
+${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${imageryCtx ? `核心意象解读：${imageryCtx}\n` : ''}${relatedCtx ? `语义相似诗篇（向量检索）：\n${relatedCtx}\n` : ''}${meterFacts}${existing?.fanyi ? `白话译文参考：${existing.fanyi.slice(0, 300)}\n` : ''}
 
 请严格按以下格式输出，不要输出任何额外文字、不要 markdown 代码块、不要重复诗词原文：
 【字词释义】
 （解析诗中2-4个关键字词的含义与用法，150字以内）
 【典故溯源】
-（解析诗中典故或核心意象的历史文化源流，150字以内${relatedCtx ? '；引用其他诗篇作为论据时，仅允许引用上述相似诗篇列表中的诗题，以《诗题》明确标注，严禁杜撰或引用列表之外的诗篇，《》内只填诗题本身，不得填入诗句' : ''}）
+（解析诗中典故或核心意象的历史文化源流，150字以内${allowExternalCitation ? '；引用其他诗篇作为论据时，仅允许引用上述相似诗篇列表中的诗题，以《诗题》明确标注，严禁杜撰或引用列表之外的诗篇，《》内只填诗题本身，不得填入诗句' : '；本次未检索到可引用的其他诗篇，严禁引用任何其他诗篇'}）
 【情感分析】
-（分析诗歌的情感路径与意境层次，150字以内${relatedCtx ? '；如需引用其他诗篇佐证，同样仅允许引用上述相似诗篇列表中的诗题' : ''}）
+（分析诗歌的情感路径与意境层次，150字以内${allowExternalCitation ? '；如需引用其他诗篇佐证，同样仅允许引用上述相似诗篇列表中的诗题' : ''}）
 【格律分析】
-（判断体裁、平仄特点、押韵与对仗情况，120字以内）`;
+（判断体裁、平仄特点、押韵与对仗情况，120字以内${meter ? '；**必须严格引用上述【格律事实】的体裁与结论，不得自行编造或矛盾**' : ''}）`;
 
         const resp = await client.chat.completions.create({
           model,
@@ -373,6 +284,36 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
 
         /* ---- 权威解析（流结束后） ---- */
         const sections = withFallback(full, parseAnnotationSections(full));
+
+        /* ---- 格律后校验：检测模型是否违背本地确定性事实 ---- */
+        let meterConflict = false;
+        let meterConflictDetail = '';
+        if (meter && sections.geli) {
+          const geliText = sections.geli;
+          // 1. 体裁一致性校验
+          const formLabel: Record<string, string> = {
+            jueju5: '五言绝句', jueju7: '七言绝句', lvshi7: '七言律诗', cipai: '词',
+          };
+          const expectedForm = formLabel[meter.form] || meter.form;
+          const formPatterns = [/五言绝句/, /七言绝句/, /五绝/, /七绝/, /七言律诗/, /七律/, /五言律诗/, /五律/, /词牌/, /词/];
+          const modelForm = formPatterns.find((p) => p.test(geliText));
+          if (modelForm && !geliText.includes(expectedForm.slice(0, 2))) {
+            meterConflict = true;
+            meterConflictDetail = `模型称「${modelForm.source}」体裁，但本地校验为「${expectedForm}」`;
+          }
+          // 2. 结论一致性校验（pass 时不得称「平仄有误」「出韵」）
+          if (meter.pass) {
+            const negativePatterns = [/平仄有误/, /平仄不合/, /押韵有误/, /出韵/, /韵脚错/];
+            if (negativePatterns.some((p) => p.test(geliText))) {
+              meterConflict = true;
+              meterConflictDetail = meterConflictDetail || '本地校验 pass，但模型称平仄/押韵有误';
+            }
+          }
+          if (meterConflict) {
+            send('meter_conflict', { detail: meterConflictDetail, localForm: expectedForm, localPass: meter.pass });
+          }
+        }
+
         const dimensions = ANNOTATION_SECTIONS.map((d) => ({
           key: d.key,
           tag: d.tag,
@@ -405,7 +346,15 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
           },
         });
 
-        send('done', { latencyMs, dimensions, model, imageryChars });
+        /* ---- 写入缓存：同诗下次注解秒级返回 ---- */
+        const cache = annotationCache();
+        if (cache.size >= CACHE_MAX) {
+          const firstKey = cache.keys().next().value;
+          if (firstKey) cache.delete(firstKey);
+        }
+        cache.set(poemId, { dims: dimensions, relatedMeta, model, imageryChars });
+
+        send('done', { latencyMs, dimensions, model, imageryChars, degraded: !useVector });
       } catch (e: any) {
         console.error('annotation stream error', e?.message || e);
         send('error', { error: 'AI生成失败，请重试' });

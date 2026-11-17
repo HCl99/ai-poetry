@@ -1,5 +1,6 @@
 import { requireAdmin } from '@/lib/admin';
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ function normalizeTags(v: unknown): string[] | undefined {
 }
 
 /** F13 诗词管理：列表搜索 + 分页 */
-export async function GET(req: Request) {
+async function GET_impl(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
 }
 
 /** F13 诗词管理：新增 */
-export async function POST(req: Request) {
+async function POST_impl(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
 }
 
 /** F13 诗词管理：编辑 */
-export async function PUT(req: Request) {
+async function PUT_impl(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
@@ -112,7 +113,7 @@ export async function PUT(req: Request) {
 }
 
 /** F13 诗词管理：删除（注解/意象关联/向量切片随外联级联删除） */
-export async function DELETE(req: Request) {
+async function DELETE_impl(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
@@ -124,3 +125,8 @@ export async function DELETE(req: Request) {
   await prisma.poem.delete({ where: { id } });
   return Response.json({ ok: true });
 }
+
+export const GET = withApi(GET_impl);
+export const POST = withApi(POST_impl);
+export const PUT = withApi(PUT_impl);
+export const DELETE = withApi(DELETE_impl);

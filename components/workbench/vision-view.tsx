@@ -29,6 +29,33 @@ interface MatchedPoem {
 
 const ACCEPT = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_EDGE = 1600; // 客户端压缩：最大边不超过 1600px，减少上传与识别耗时
+
+/** 客户端压缩：最大边缩到 1600px，输出 JPEG，避免大图上传慢 */
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('canvas 不可用')); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('图片解码失败'));
+      img.src = String(fr.result);
+    };
+    fr.onerror = () => reject(new Error('读取失败'));
+    fr.readAsDataURL(file);
+  });
+}
 
 const EXAMPLES = ['月下江面与一叶孤舟', '雨后青山云雾缭绕', '雪中寒梅数枝', '春日柳岸飞燕'];
 
@@ -77,12 +104,7 @@ export function VisionView() {
       return;
     }
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result || ''));
-        fr.onerror = () => reject(new Error('读取失败'));
-        fr.readAsDataURL(file);
-      });
+      const dataUrl = await compressImage(file);
       if (!/^data:image\/(png|jpeg|webp);base64,/.test(dataUrl)) {
         setError('图片读取失败，请换一张图片重试');
         return;

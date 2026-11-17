@@ -1,9 +1,10 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+async function GET_impl() {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
   const rows = await prisma.creation.findMany({
@@ -21,3 +22,5 @@ export async function GET() {
     })),
   );
 }
+
+export const GET = withApi(GET_impl);

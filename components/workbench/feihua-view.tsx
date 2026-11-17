@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Swords, RotateCcw, Flag, CheckCheck, Sparkles, Lightbulb } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Swords, RotateCcw, Flag, CheckCheck, Sparkles, Lightbulb, History, X } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 
 const PRESET_CHARS = ['花', '月', '春', '风', '雪', '山', '水', '云', '夜', '酒'];
@@ -10,6 +10,8 @@ const MAX_HINTS = 3;
 
 interface Source { title: string; author: string; dynasty: string }
 interface Move { side: 'user' | 'ai'; text: string; source?: Source; judged?: boolean }
+interface FeihuaRecord { id: string; char: string; result: 'win' | 'lose'; userLines: number; aiLines: number; rounds: number; createdAt: string }
+interface FeihuaStats { total: number; wins: number; winRate: number }
 
 const strip = (s: string) => s.replace(/[，。？！、；：''""\s《》·\-—]/g, '');
 
@@ -23,8 +25,23 @@ export function FeihuaView() {
   const [over, setOver] = useState<null | 'win' | 'lose'>(null);
   const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
   const [hintLoading, setHintLoading] = useState(false);
+  const [records, setRecords] = useState<FeihuaRecord[]>([]);
+  const [stats, setStats] = useState<FeihuaStats | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const { msg, show } = useToast();
   const listRef = useRef<HTMLDivElement>(null);
+
+  async function loadRecords() {
+    try {
+      const r = await fetch('/api/feihua');
+      if (!r.ok) return;
+      const d = await r.json();
+      setRecords(d.records || []);
+      setStats(d.stats || null);
+    } catch {}
+  }
+
+  useEffect(() => { loadRecords(); }, []);
 
   function start(c: string) {
     if (!/^[\u4e00-\u9fa5]$/.test(c)) { show('令字必须是单个汉字'); return; }
@@ -35,6 +52,21 @@ export function FeihuaView() {
     setHintsLeft(MAX_HINTS);
     setInput('');
     show(`飞花令开始 · 令字「${c}」，请你先出句`);
+  }
+
+  /** 认输：记录负场并结束 */
+  async function resign() {
+    const userCount = moves.filter((m) => m.side === 'user').length;
+    const aiCount = moves.filter((m) => m.side === 'ai').length;
+    setOver('lose');
+    try {
+      await fetch('/api/feihua', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ char, result: 'lose', userLines: userCount, aiLines: aiCount }),
+      });
+      loadRecords();
+    } catch {}
   }
 
   /** 出句前本地预检：乱码/重复即时反馈，不打扰后端 */
@@ -73,6 +105,7 @@ export function FeihuaView() {
       } else {
         setMoves(next);
         setOver('win');
+        loadRecords();
       }
     } catch (e: any) {
       show(e?.message || '网络异常，请重试');
@@ -120,6 +153,30 @@ export function FeihuaView() {
           </p>
         </div>
 
+        {/* 战绩 + 历史按钮 */}
+        <div className="paper-card flex flex-wrap items-center gap-4 p-4">
+          <div className="flex gap-4">
+            <div className="text-center">
+              <div className="font-brush text-2xl" style={{ color: '#6B8E7B' }}>{stats?.wins ?? 0}</div>
+              <div className="font-ui text-[10px] text-ink-soft">胜场</div>
+            </div>
+            <div className="text-center">
+              <div className="font-brush text-2xl" style={{ color: '#A67C7C' }}>{(stats?.total ?? 0) - (stats?.wins ?? 0)}</div>
+              <div className="font-ui text-[10px] text-ink-soft">负场</div>
+            </div>
+            <div className="text-center">
+              <div className="font-brush text-2xl" style={{ color: '#C4A965' }}>{stats?.winRate ?? 0}%</div>
+              <div className="font-ui text-[10px] text-ink-soft">胜率</div>
+            </div>
+          </div>
+          <button
+            onClick={() => { loadRecords(); setShowHistory(true); }}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+          >
+            <History className="h-3.5 w-3.5" /> 对战记录
+          </button>
+        </div>
+
         <div className="paper-card mx-auto max-w-xl p-8 text-center">
           <p className="font-ui text-sm text-ink-mid">选择令字，或自定一个汉字</p>
           <div className="mt-5 grid grid-cols-5 gap-3">
@@ -163,6 +220,7 @@ export function FeihuaView() {
             <li>卡住时可「求提示」，每局限 3 次，用完按钮置灰</li>
           </ol>
         </div>
+        {showHistory && <HistoryModal records={records} onClose={() => setShowHistory(false)} />}
         <Toast msg={msg} />
       </div>
     );
@@ -180,8 +238,11 @@ export function FeihuaView() {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => { loadRecords(); setShowHistory(true); }} className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark">
+            <History className="h-3.5 w-3.5" /> 记录
+          </button>
           {!over && (
-            <button onClick={() => { setOver('lose'); }} className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark">
+            <button onClick={resign} className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark">
               <Flag className="h-3.5 w-3.5" /> 认输
             </button>
           )}
@@ -285,7 +346,45 @@ export function FeihuaView() {
           </div>
         )}
       </div>
+      {showHistory && <HistoryModal records={records} onClose={() => setShowHistory(false)} />}
       <Toast msg={msg} />
+    </div>
+  );
+}
+
+function HistoryModal({ records, onClose }: { records: FeihuaRecord[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="paper-card max-h-[80vh] w-full max-w-2xl overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-brush text-2xl text-ink-deep">飞花令对战记录</h2>
+          <button onClick={onClose} className="rounded-lg p-1 text-ink-soft hover:bg-paper-dark">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {records.length === 0 ? (
+          <p className="py-10 text-center font-ui text-sm text-ink-soft">还没有对战记录</p>
+        ) : (
+          <div className="space-y-2">
+            {records.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 rounded-lg p-3" style={{ background: 'var(--inset)' }}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg font-brush text-xl text-white" style={{ background: r.result === 'win' ? '#6B8E7B' : '#A67C7C' }}>
+                  {r.char}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full px-2 py-0.5 font-ui text-[10px]" style={r.result === 'win' ? { background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' } : { background: 'rgba(166,124,124,0.15)', color: '#A67C7C' }}>
+                      {r.result === 'win' ? '胜利' : '认输'}
+                    </span>
+                    <span className="font-ui text-xs text-ink-soft">你 {r.userLines} 句 / AI {r.aiLines} 句</span>
+                  </div>
+                  <p className="mt-0.5 font-ui text-[10px] text-ink-soft">{new Date(r.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -2,15 +2,12 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { screenInput } from '@/lib/content-filter';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 const strip = (s: string) => s.replace(/[，。？！、；：''""\s《》·\-—]/g, '');
 
@@ -123,16 +120,72 @@ export async function POST(req: Request) {
   if (candidates.length > 0) {
     aiLine = candidates[Math.floor(Math.random() * candidates.length)];
   } else {
-    // AI 无句可应 → 用户获胜，记入学习历史
-    await prisma.history.create({
-      data: {
-        userId: session.user.id,
-        actionType: 'feihua',
-        title: `飞花令「${char}」获胜`,
-        detail: `AI 无句可应 · 你共对出 ${used.length + 1} 句`,
-      },
-    });
+    // AI 无句可应 → 用户获胜，记入学习历史与对战记录
+    const userCount = used.length + 1;
+    await Promise.all([
+      prisma.history.create({
+        data: {
+          userId: session.user.id,
+          actionType: 'feihua',
+          title: `飞花令「${char}」获胜`,
+          detail: `AI 无句可应 · 你共对出 ${userCount} 句`,
+        },
+      }),
+      prisma.feihuaRecord.create({
+        data: {
+          userId: session.user.id,
+          char,
+          result: 'win',
+          rounds: Math.ceil((userCount + 0) / 1),
+          userLines: userCount,
+          aiLines: used.length,
+        },
+      }),
+    ]);
   }
 
   return Response.json({ valid: true, judged, source, aiLine });
+}
+
+/** 认输 / 结束对局时记录结果 */
+export async function PUT(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const { char, result, userLines, aiLines } = (await req.json()) as { char?: string; result?: string; userLines?: number; aiLines?: number };
+  if (!char || !/^[\u4e00-\u9fa5]$/.test(char)) return Response.json({ error: '令字非法' }, { status: 400 });
+  if (!['win', 'lose'].includes(result || '')) return Response.json({ error: '结果非法' }, { status: 400 });
+  const rec = await prisma.feihuaRecord.create({
+    data: {
+      userId: session.user.id,
+      char,
+      result: result!,
+      userLines: userLines || 0,
+      aiLines: aiLines || 0,
+      rounds: Math.max(1, (userLines || 0)),
+    },
+  });
+  return Response.json({ id: String(rec.id) });
+}
+
+/** 飞花令对战历史记录 */
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
+  const [records, agg] = await Promise.all([
+    prisma.feihuaRecord.findMany({ where: { userId: session.user.id }, orderBy: { createdAt: 'desc' }, take: 20 }),
+    prisma.feihuaRecord.aggregate({ where: { userId: session.user.id }, _count: { _all: true } }),
+  ]);
+  const wins = records.filter((r) => r.result === 'win').length;
+  return Response.json({
+    records: records.map((r) => ({
+      id: String(r.id),
+      char: r.char,
+      result: r.result,
+      userLines: r.userLines,
+      aiLines: r.aiLines,
+      rounds: r.rounds,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    stats: { total: agg._count._all, wins, winRate: agg._count._all ? Math.round((wins / agg._count._all) * 100) : 0 },
+  });
 }

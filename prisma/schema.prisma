@@ -2,7 +2,9 @@
 // 映射 MySQL schema.sql 中的 8 张表 + users 表（鉴权用）
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Vercel（Amazon Linux 2023）需要 rhel-openssl-3.0.x；native 供本机开发使用
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -126,11 +128,19 @@ model AnnotationLog {
 model User {
   id                String    @id @default(uuid()) @db.Char(36)
   email             String    @unique @db.VarChar(255)
+  // 登录账号：注册时由邮箱前缀自动生成，可与邮箱任选其一登录
+  username          String?   @unique @db.VarChar(32)
   name              String?   @db.VarChar(64)
   passwordHash      String    @map("password_hash") @db.VarChar(255)
   role              String    @default("user") @db.VarChar(16)
   status            String    @default("active") @db.VarChar(16)
   avatar            String?   @db.Text
+  // 学段：primary 小学 / junior 初中 / senior 高中 / college 大学 / adult 成人，决定闯关与测验的题源与难度
+  stage             String    @default("junior") @db.VarChar(16)
+  // 学习方向：exam 应试巩固 / taste 兴趣赏析 / create 创作提升
+  goal              String    @default("exam") @db.VarChar(16)
+  // 是否已完成「定方向」引导（false 时工作台弹出方向选择）
+  onboarded         Boolean   @default(false)
   // 密码最后修改时间：JWT 会话签发时间早于该值即视为失效（改密/重置后强制重新登录）
   passwordChangedAt DateTime? @map("password_changed_at")
   createdAt         DateTime  @default(now()) @map("created_at")
@@ -145,7 +155,8 @@ model Post {
   title      String   @db.VarChar(255)
   content    String   @db.Text
   category   String   @db.VarChar(16)
-  status     String   @default("approved") @db.VarChar(16)
+  // 先审后发：pending -> approved / rejected，作者可随时置为 withdrawn（终态）
+  status     String   @default("pending") @db.VarChar(16)
   flagReason String?  @map("flag_reason") @db.VarChar(255)
   reviewNote String?  @map("review_note") @db.VarChar(255)
   createdAt  DateTime @default(now()) @map("created_at")
@@ -153,6 +164,25 @@ model Post {
   @@index([status, createdAt], map: "idx_posts_status")
   @@index([userId], map: "idx_posts_user")
   @@map("posts")
+}
+
+// 帖子审核记录（操作历史）：状态变化全程留痕，帖子被删除后记录仍可追溯，故不设外键
+model PostReviewLog {
+  id           BigInt   @id @default(autoincrement())
+  postId       BigInt   @map("post_id")
+  postTitle    String   @map("post_title") @db.VarChar(255)
+  action       String   @db.VarChar(16)
+  fromStatus   String?  @map("from_status") @db.VarChar(16)
+  toStatus     String?  @map("to_status") @db.VarChar(16)
+  operatorId   String?  @map("operator_id") @db.Char(36)
+  operatorName String   @default("系统") @map("operator_name") @db.VarChar(64)
+  actorRole    String   @default("system") @map("actor_role") @db.VarChar(16)
+  note         String?  @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([postId], map: "idx_prl_post")
+  @@index([createdAt], map: "idx_prl_created")
+  @@map("post_review_logs")
 }
 
 // 帖子评论（parentId 支持楼中楼回复）
@@ -213,6 +243,7 @@ model History {
   targetId   String?  @map("target_id") @db.VarChar(64)
   title      String?  @db.VarChar(255)
   detail     String?  @db.VarChar(500)
+  isRead     Boolean  @default(false) @map("is_read")
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([userId, createdAt], map: "idx_hist_user")
@@ -237,14 +268,41 @@ model Creation {
   inputText  String   @map("input_text") @db.Text
   outputText String   @map("output_text") @db.Text
   model      String?  @db.VarChar(32)
+  // 旧字段：是否为公开作品，保留用于兼容；分享审核通过时同步为 true
   isPublic   Boolean  @default(false) @map("is_public")
+  // 广场分享审核：private / pending / approved / rejected / withdrawn
+  shareStatus     String    @default("private") @map("share_status") @db.VarChar(16)
+  shareFlagReason String?   @map("share_flag_reason") @db.VarChar(255)
+  shareReviewNote String?   @map("share_review_note") @db.VarChar(255)
+  sharedAt        DateTime? @map("shared_at")
+  reviewedAt      DateTime? @map("reviewed_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
   likes CreationLike[]
 
   @@index([userId, createdAt], map: "idx_creation_user")
   @@index([isPublic, createdAt], map: "idx_creation_public")
+  @@index([shareStatus, createdAt], map: "idx_creation_share")
   @@map("creations")
+}
+
+// 作品广场分享审核记录：与帖子审核同样全程留痕，作品删除后仍可追溯
+model CreationReviewLog {
+  id            BigInt   @id @default(autoincrement())
+  creationId    BigInt   @map("creation_id")
+  creationTitle String   @map("creation_title") @db.VarChar(255)
+  action        String   @db.VarChar(16)
+  fromStatus    String?  @map("from_status") @db.VarChar(16)
+  toStatus      String?  @map("to_status") @db.VarChar(16)
+  operatorId    String?  @map("operator_id") @db.Char(36)
+  operatorName  String   @default("系统") @map("operator_name") @db.VarChar(64)
+  actorRole     String   @default("system") @map("actor_role") @db.VarChar(16)
+  note          String?  @db.VarChar(255)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([creationId], map: "idx_crl_creation")
+  @@index([createdAt], map: "idx_crl_created")
+  @@map("creation_review_logs")
 }
 
 // 创作点赞（一人一赞，可取消）
@@ -320,4 +378,34 @@ model AiCreation {
 
   @@index([userId, createdAt], map: "idx_ai_creation_user")
   @@map("ai_creations")
+}
+
+// 飞花令对战记录
+model FeihuaRecord {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Char(36)
+  char      String   @db.VarChar(4)
+  result    String   @db.VarChar(8) // win | lose
+  rounds    Int      @default(0)
+  userLines Int      @default(0) @map("user_lines")
+  aiLines   Int      @default(0) @map("ai_lines")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_feihua_user")
+  @@map("feihua_records")
+}
+
+// 用户通知：反馈回复、帖子/作品审核结果
+model Notification {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Char(36)
+  type      String   @db.VarChar(32) // feedback_reply | post_approved | post_rejected | share_approved | share_rejected | share_takedown
+  title     String   @db.VarChar(255)
+  body      String   @db.Text
+  link      String?  @db.VarChar(500) // 跳转链接（可选）
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, read, createdAt], map: "idx_notif_user")
+  @@map("notifications")
 }

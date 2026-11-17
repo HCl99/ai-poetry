@@ -1,10 +1,11 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
 /** 学习社区：帖子点赞/取消赞（一人一赞） */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+async function POST_impl(_req: Request, { params }: { params: { id: string } }) {
   const session = await auth();
   const uid = session?.user?.id;
   if (!uid) return Response.json({ error: '未登录' }, { status: 401 });
@@ -31,3 +32,5 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const likes = await prisma.postLike.count({ where: { postId: pid } });
   return Response.json({ likedByMe: !liked, likes });
 }
+
+export const POST = withApi(POST_impl);

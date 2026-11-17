@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
 /** 诗人对话的候选列表：默认按互提关系度排序的头部诗人，支持按名字搜索 */
-export async function GET(req: Request) {
+async function GET_impl(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q')?.trim() || '';
 
@@ -51,3 +52,5 @@ export async function GET(req: Request) {
       .sort((a, b) => b.degree - a.degree),
   );
 }
+
+export const GET = withApi(GET_impl);

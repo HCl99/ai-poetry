@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { TEXT_INPUT_CLASS, INPUT_ICON_CLASS } from '@/components/password-input';
+import { checkEmailFormat } from '@/lib/email-format';
 
 function ShieldIcon() {
   return (
@@ -11,8 +12,6 @@ function ShieldIcon() {
     </svg>
   );
 }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * 邮箱验证码输入行：6 位数字输入框 + 获取验证码按钮（60 秒倒计时）。
@@ -55,8 +54,9 @@ export function EmailCodeField({
     setErr('');
     setMsg('');
     const target = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(target)) {
-      setErr('请先填写正确的邮箱');
+    const emailError = checkEmailFormat(target);
+    if (emailError) {
+      setErr(emailError);
       return;
     }
     setSending(true);
@@ -69,7 +69,8 @@ export function EmailCodeField({
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         setErr(d.error || '验证码发送失败，请重试');
-        if (r.status === 429 && d.error) startCooldown(30);
+        // 锁定/频控时按服务端给出的等待秒数倒计时，避免按钮提前恢复可点
+        if (r.status === 429) startCooldown(Number(d.retryAfterSec) || 30);
         return;
       }
       setMsg(d.message || '验证码已发送，请查收邮箱（含垃圾邮件箱）');
@@ -83,26 +84,26 @@ export function EmailCodeField({
 
   return (
     <div>
-      <div className="flex gap-2">
-        <div className="group relative flex-1">
-          <span className={INPUT_ICON_CLASS}><ShieldIcon /></span>
-          <input
-            name="code"
-            type="text"
-            inputMode="numeric"
-            pattern="\d{6}"
-            maxLength={6}
-            required
-            autoComplete="one-time-code"
-            placeholder="6 位邮箱验证码"
-            className={TEXT_INPUT_CLASS}
-          />
-        </div>
+      {/* 发送按钮内嵌在输入框右侧（suffix），比并列两列更省横向空间，与其他字段宽度对齐 */}
+      <div className="group relative">
+        <span className={INPUT_ICON_CLASS}><ShieldIcon /></span>
+        <input
+          name="code"
+          type="text"
+          inputMode="numeric"
+          pattern="\d{6}"
+          maxLength={6}
+          required
+          autoComplete="one-time-code"
+          placeholder="6 位邮箱验证码"
+          className={TEXT_INPUT_CLASS}
+          style={{ paddingRight: 116 }}
+        />
         <button
           type="button"
           onClick={send}
           disabled={sending || cooldown > 0}
-          className="h-11 w-[104px] shrink-0 rounded-lg border-[1.5px] border-c font-ui text-[13px] text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md px-2.5 py-1.5 font-ui text-[12px] text-muted-blue transition-ink hover:bg-paper-dark disabled:opacity-50"
         >
           {cooldown > 0 ? `${cooldown}s 后重发` : sending ? '发送中…' : '获取验证码'}
         </button>

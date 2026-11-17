@@ -5,6 +5,10 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
 import { verifyCode } from '@/lib/email-code';
+import { checkEmailFormat } from '@/lib/email-format';
+
+/** 与注册页保持同一密码规则 */
+const PWD_RE = /^(?=.*\d)(?=.*[A-Za-z]).{8,20}$/;
 
 /** 找回密码：邮箱验证码校验通过后重置密码，验证码一次性消费 */
 export async function resetPassword(formData: FormData): Promise<{ error?: string; success?: boolean }> {
@@ -14,9 +18,12 @@ export async function resetPassword(formData: FormData): Promise<{ error?: strin
   const confirm = formData.get('confirm') as string;
 
   if (!email || !password) return { error: '邮箱和新密码不能为空' };
+  const emailError = checkEmailFormat(email);
+  if (emailError) return { error: emailError };
   if (!code) return { error: '请填写邮箱验证码' };
   if (password !== confirm) return { error: '两次输入的密码不一致' };
-  if (password.length < 6) return { error: '密码长度至少 6 位' };
+  if (password.length < 8 || password.length > 20) return { error: '密码长度需为 8-20 位' };
+  if (!PWD_RE.test(password)) return { error: '密码需同时包含数字和字母' };
 
   // 防爆破：按 IP 限流 5 次/分钟
   const ip = headers().get('x-forwarded-for')?.split(',')[0]?.trim() || 'local';

@@ -1,7 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpenCheck, CheckCircle2, Loader2, PenLine, RefreshCw, Sparkles, XCircle } from 'lucide-react';
+import { STAGE_DIFFICULTY, type Stage, type Goal } from '@/lib/classics';
+
+/** 学习方向 → 默认题型：应试练选择，赏析练鉴赏，创作练填空（字词格律） */
+const GOAL_QUIZ_TYPE: Record<Goal, 'choice' | 'blank' | 'appreciation'> = {
+  exam: 'choice',
+  taste: 'appreciation',
+  create: 'blank',
+};
+import { BookOpenCheck, CheckCircle2, Loader2, PenLine, RefreshCw, Sparkles, X, XCircle } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 
 interface QuizQuestion {
@@ -37,7 +45,22 @@ export function QuizView() {
   const [result, setResult] = useState<QuizResult | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [stageLabel, setStageLabel] = useState<string | null>(null);
+  const [showRecords, setShowRecords] = useState(false);
   const { msg, show } = useToast();
+
+  // 按账号学段/方向决定默认难度与默认题型（仍可手动调整）
+  useEffect(() => {
+    fetch('/api/user/stage')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.stage) return;
+        setStageLabel(d.label);
+        setDifficulty(STAGE_DIFFICULTY[d.stage as Stage]);
+        if (d.goal) setType(GOAL_QUIZ_TYPE[d.goal as Goal]);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadRecords = useCallback(async () => {
     try {
@@ -51,8 +74,9 @@ export function QuizView() {
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
-  async function generate() {
+  async function generate(typeOverride?: (typeof TYPE_TABS)[number]['key']) {
     if (loadingQuiz) return;
+    const t = typeOverride || type;
     setLoadingQuiz(true);
     setQuiz(null);
     setResult(null);
@@ -62,7 +86,7 @@ export function QuizView() {
       const r = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, difficulty }),
+        body: JSON.stringify({ type: t, difficulty }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || '出题失败');
@@ -109,7 +133,7 @@ export function QuizView() {
           {TYPE_TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => setType(t.key)}
+              onClick={() => { setType(t.key); generate(t.key); }}
               className="rounded-xl border-[1.5px] p-4 text-left transition-ink"
               style={type === t.key
                 ? { borderColor: 'var(--btn-bg)', background: 'rgba(107,142,123,0.08)' }
@@ -125,6 +149,11 @@ export function QuizView() {
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <span className="font-ui text-sm text-ink-deep">难度</span>
+          {stageLabel && (
+            <span className="rounded-full px-2.5 py-0.5 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.12)', color: '#4F7A5F' }}>
+              按{stageLabel}学段出题
+            </span>
+          )}
           {DIFFS.map((d) => (
             <button
               key={d.key}
@@ -138,7 +167,7 @@ export function QuizView() {
             </button>
           ))}
           <button
-            onClick={generate}
+            onClick={() => { void generate(); }}
             disabled={loadingQuiz}
             className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-5 py-2 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5 disabled:opacity-50"
             style={{ background: 'var(--btn-grad)' }}
@@ -166,7 +195,8 @@ export function QuizView() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full px-2.5 py-0.5 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{quiz.typeLabel}</span>
                 <span className="rounded-full px-2.5 py-0.5 font-ui text-xs" style={{ background: 'rgba(196,169,101,0.15)', color: '#C4A965' }}>难度 · {quiz.diffLabel}</span>
-                {quiz.poem && (
+                {/* 出处含诗题与作者，答完再揭晓，避免直接泄露选择题答案 */}
+                {quiz.poem && result && (
                   <span className="font-ui text-xs text-ink-soft">
                     出自诗库 · <button className="hover:underline" onClick={() => window.open(`/workbench/explore?q=${encodeURIComponent(quiz.poem!.title)}`, '_self')}>《{quiz.poem.title}》{quiz.poem.author}</button>
                   </span>
@@ -260,13 +290,13 @@ export function QuizView() {
                         {quiz.type === 'appreciation' ? 'AI 阅卷评分' : result.score === 100 ? '回答正确！' : '回答错误'}
                       </div>
                       <p className="mt-0.5 font-ui text-xs leading-relaxed text-ink-mid">{result.feedback}</p>
-                      {quiz.type !== 'choice' && (
-                        <p className="mt-1 font-ui text-xs text-ink-soft">参考答案：{result.answer}</p>
+                      {quiz.type === 'appreciation' && (
+                        <p className="mt-1 font-ui text-xs text-ink-soft">参考赏析：{result.answer}</p>
                       )}
                     </div>
                   </div>
                   <button
-                    onClick={generate}
+                    onClick={() => { void generate(); }}
                     className="mt-4 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5"
                     style={{ background: 'var(--btn-grad)' }}
                   >
@@ -292,10 +322,31 @@ export function QuizView() {
               </div>
             ))}
           </div>
-          <div className="paper-card p-4">
-            <h3 className="mb-3 font-ui text-[15px] font-medium text-ink-deep">最近答题记录</h3>
+          <button
+            onClick={() => { loadRecords(); setShowRecords(true); }}
+            className="paper-card flex w-full items-center justify-between p-4 text-left transition-ink hover:-translate-y-0.5"
+          >
+            <div>
+              <h3 className="font-ui text-[15px] font-medium text-ink-deep">最近答题记录</h3>
+              <p className="mt-0.5 font-ui text-xs text-ink-soft">共 {stats?.total ?? 0} 条记录 · 点击查看</p>
+            </div>
+            <span className="font-brush text-2xl text-ink-soft">›</span>
+          </button>
+        </aside>
+      </div>
+
+      {/* 答题记录弹窗 */}
+      {showRecords && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowRecords(false)}>
+          <div className="paper-card max-h-[80vh] w-full max-w-2xl overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-brush text-2xl text-ink-deep">最近答题记录</h2>
+              <button onClick={() => setShowRecords(false)} className="rounded-lg p-1 text-ink-soft hover:bg-paper-dark">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             {records.length === 0 ? (
-              <p className="py-6 text-center font-ui text-xs text-ink-soft">还没有答题记录</p>
+              <p className="py-10 text-center font-ui text-sm text-ink-soft">还没有答题记录</p>
             ) : (
               <div className="space-y-2">
                 {records.map((r) => (
@@ -308,15 +359,15 @@ export function QuizView() {
                         {r.score ?? '-'}
                       </span>
                     </div>
-                    <p className="mt-1 truncate font-ui text-xs text-ink-mid" title={r.question}>{r.question.replace(/\n/g, ' ')}</p>
+                    <p className="mt-1 font-ui text-xs text-ink-mid">{r.question.replace(/\n/g, ' ')}</p>
                     <p className="mt-0.5 font-ui text-[10px] text-ink-soft">{new Date(r.createdAt).toLocaleString()}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </aside>
-      </div>
+        </div>
+      )}
       <Toast msg={msg} />
     </div>
   );

@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
  * SSR/首帧固定 day 相位，挂载后校正（useEffect 后置），避免水合不一致；色调经 .ink-tint/.ink-moon CSS 1.6s 平滑过渡。
  * v2.8 鼠标视差：三层景深——远山/雾气(远,3px)、墨晕/墨滴(中,7px)、明月(反向漂移,-12px)。
  * 视差直接写 DOM transform（rAF 节流，不触发 React 重渲染）；仅指针精确设备启用，
- * prefers-reduced-motion / motion-off 时静止。包裹层 -inset-3 出血，位移不露边缘。
+ * prefers-reduced-motion 时静止。包裹层 -inset-3 出血，位移不露边缘。
  */
 type Phase = 'dawn' | 'day' | 'night';
 
@@ -34,7 +34,6 @@ export function InkBackdrop() {
     // 触屏/粗指针设备无视差；无障碍偏好时静止
     if (!window.matchMedia('(pointer: fine)').matches) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (document.documentElement.classList.contains('motion-off')) return;
 
     let raf = 0;
     const onMove = (e: MouseEvent) => {

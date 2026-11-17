@@ -55,9 +55,9 @@ const config: Config = {
         sm: 'calc(var(--radius) - 8px)',
       },
       fontFamily: {
-        brush: ['"Ma Shan Zheng"', '"Noto Serif SC"', 'serif'],
-        serif: ['"Noto Serif SC"', '"Source Han Serif SC"', 'STSong', 'serif'],
-        sans: ['"Noto Sans SC"', 'system-ui', 'sans-serif'],
+        brush: ['"Ma Shan Zheng"', '"KaiTi"', '"STKaiti"', 'serif'],
+        serif: ['"Source Han Serif SC"', '"Noto Serif SC"', '"Songti SC"', 'STSong', 'SimSun', 'serif'],
+        sans: ['system-ui', '"Microsoft YaHei"', '"PingFang SC"', '"Noto Sans SC"', 'sans-serif'],
       },
       boxShadow: {
         ink: '0 2px 24px rgba(60,50,40,0.06)',

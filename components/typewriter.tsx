@@ -22,9 +22,8 @@ export function Typewriter({
 
   useEffect(() => {
     if (single) return;
-    // 无障碍：系统减少动态偏好或设置中手动关闭动效时，轮播静止于首句
+    // 无障碍：系统减少动态偏好时，轮播静止于首句
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (document.documentElement.classList.contains('motion-off')) return;
     let t: ReturnType<typeof setTimeout>;
     if (phase === 'in') t = setTimeout(() => setPhase('hold'), 750);
     else if (phase === 'hold') t = setTimeout(() => setPhase('out'), holdMs);
@@ -34,7 +33,7 @@ export function Typewriter({
 
   const cur = lines[idx % lines.length];
   return (
-    <span className={className} aria-label={lines[0]}>
+    <span className={className} role="img" aria-label={lines[0]}>
       <span
         key={idx}
         aria-hidden="true"

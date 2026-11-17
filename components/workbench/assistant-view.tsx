@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Check, ChevronDown, Loader2, Plus, Send, Sparkles, Square, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { Bot, Check, ChevronDown, Loader2, Menu, Plus, Send, Sparkles, Square, Trash2, X } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { VoiceInputButton } from '@/components/voice-input-button';
 import { sseEvents } from '@/lib/sse';
 
 interface Related { id: string; title: string; author: string; dynasty: string; score: number | null }
-interface Step { label: string; detail: string }
+interface Step { label: string; detail: string; phase?: string }
 interface ChatMsg {
   role: 'user' | 'assistant';
   content: string;
@@ -17,6 +18,7 @@ interface ChatMsg {
   invalidCitations?: string[];
   latencyMs?: number;
   error?: string;
+  stopped?: boolean;
 }
 interface Conversation { id: string; title: string; createdAt: string; messages: ChatMsg[] }
 
@@ -25,8 +27,12 @@ const STORE_KEY = 'assistant-conversations';
 const QUICK_ASKS = [
   '李白的《静夜思》表达了怎样的情感？',
   '“明月”意象在唐诗中有哪些经典用法？',
-  '帮我对比李白与杜甫的诗歌风格',
+  '帮我写一首描写春天的七言绝句',
   '“春风又绿江南岸”的“绿”字好在哪里？',
+  '推荐几首适合中秋读的古诗',
+  '为什么苏东坡的词风格与柳永不同？',
+  '解释一下"采菊东篱下，悠然见南山"',
+  '唐诗和宋词在形式上有什么区别？',
 ];
 
 /** Agent 工作流的四个阶段（与服务端 SSE step 事件一一对应） */
@@ -47,8 +53,12 @@ function loadConversations(): Conversation[] {
 
 function saveConversations(list: Conversation[]) {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(list.slice(0, 20)));
-  } catch {}
+    // 只保留每个会话最近 40 条消息，避免长会话把 localStorage（约 5MB）写满后静默丢失
+    const slim = list.slice(0, 20).map((c) => ({ ...c, messages: c.messages.slice(-40) }));
+    localStorage.setItem(STORE_KEY, JSON.stringify(slim));
+  } catch (e) {
+    console.warn('[assistant] 历史保存失败（可能已超出本地存储配额）', e);
+  }
 }
 
 export function AssistantView() {
@@ -58,17 +68,17 @@ export function AssistantView() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [stepsOpen, setStepsOpen] = useState<Record<number, boolean>>({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { msg, show } = useToast();
 
   useEffect(() => {
+    // 仅加载会话列表到侧边栏，不自动选中任何历史会话——
+    // 每次进入 AI 助手默认是「新对话」状态（欢迎页 + 快捷提问），
+    // 历史会话收在左侧边栏，用户主动点击才展开
     const list = loadConversations();
     setConvs(list);
-    if (list.length) {
-      setActiveId(list[0].id);
-      setMessages(list[0].messages);
-    }
   }, []);
 
   useEffect(() => {
@@ -93,6 +103,7 @@ export function AssistantView() {
     setActiveId(null);
     setMessages([]);
     setStepsOpen({});
+    setDrawerOpen(false);
   }
 
   function openConv(c: Conversation) {
@@ -100,6 +111,7 @@ export function AssistantView() {
     setActiveId(c.id);
     setMessages(c.messages);
     setStepsOpen({});
+    setDrawerOpen(false);
   }
 
   function removeConv(e: React.MouseEvent, id: string) {
@@ -163,12 +175,15 @@ export function AssistantView() {
         setMessages(current);
       }
     } catch (e: any) {
+      const idx = current.length - 1;
       if (e?.name !== 'AbortError') {
         show(e?.message || '网络异常，请重试');
-        const idx = current.length - 1;
         current = [...current.slice(0, idx), { ...current[idx], error: e?.message || '生成失败' }];
-        setMessages(current);
+      } else {
+        // 用户主动停止：保留已生成的部分，并明确标注，避免看起来像回答被截断
+        current = [...current.slice(0, idx), { ...current[idx], stopped: true }];
       }
+      setMessages(current);
     } finally {
       setBusy(false);
       abortRef.current = null;
@@ -179,9 +194,26 @@ export function AssistantView() {
   const active = convs.find((c) => c.id === activeId);
 
   return (
-    <div className="flex h-[calc(100vh-9.5rem)] gap-5">
-      {/* 会话历史 */}
-      <aside className="hidden w-60 shrink-0 flex-col md:flex">
+    <div className="relative flex h-[calc(100vh-9.5rem)] gap-5">
+      {/* 移动端遮罩 */}
+      {drawerOpen && (
+        <button
+          className="absolute inset-0 z-20 bg-black/25 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+          aria-label="关闭会话历史"
+        />
+      )}
+      {/* 会话历史：md 以下改为抽屉，移动端也能新建/切换会话 */}
+      <aside
+        className={`${drawerOpen ? 'flex' : 'hidden'} absolute inset-y-0 left-0 z-30 w-64 flex-col rounded-xl p-3 md:static md:z-auto md:flex md:w-60 md:rounded-none md:p-0`}
+        style={{ background: 'var(--paper)' }}
+      >
+        <div className="mb-2 flex items-center justify-between md:hidden">
+          <span className="font-ui text-xs text-ink-soft">会话历史</span>
+          <button onClick={() => setDrawerOpen(false)} aria-label="关闭">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
         <button
           onClick={newChat}
           disabled={busy}
@@ -219,10 +251,27 @@ export function AssistantView() {
             <Bot className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="font-ui text-[15px] font-medium leading-tight text-ink-deep">AI 诗词助手</h1>
-            <p className="font-ui text-[11px] leading-tight text-ink-soft">RAG 检索增强 · 引用硬约束 · 多轮对话</p>
+            <h1 className="font-ui text-[15px] font-medium leading-tight text-ink-deep">AI 助手</h1>
+            <p className="font-ui text-[11px] leading-tight text-ink-soft">自由对话 · 诗词知识库随时参考</p>
           </div>
-          {active && <span className="ml-auto truncate font-ui text-xs text-ink-soft">{active.title}</span>}
+          <div className="ml-auto flex items-center gap-2">
+            {active && <span className="hidden truncate font-ui text-xs text-ink-soft sm:block">{active.title}</span>}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="rounded-lg border border-c p-1.5 text-ink-soft transition-ink hover:text-ink-deep md:hidden"
+              aria-label="打开会话历史"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <button
+              onClick={newChat}
+              disabled={busy}
+              className="rounded-lg border border-c p-1.5 text-ink-soft transition-ink hover:text-ink-deep disabled:opacity-40 md:hidden"
+              aria-label="新对话"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
         </header>
 
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
@@ -231,8 +280,8 @@ export function AssistantView() {
               <span className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-ink" style={{ background: 'var(--brand-grad)' }}>
                 <Sparkles className="h-7 w-7" />
               </span>
-              <p className="mt-4 font-brush text-2xl text-ink-deep">问诗 · 问意 · 问诗人</p>
-              <p className="mt-1 font-ui text-sm text-ink-soft">基于 34 万诗词知识库检索回答，引用可溯源、越界即拦截</p>
+              <p className="mt-4 font-brush text-2xl text-ink-deep">随心而问 · 答无定界</p>
+              <p className="mt-1 font-ui text-sm text-ink-soft">诗词、文学、生活、创作…都可以聊</p>
               <div className="mt-6 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
                 {QUICK_ASKS.map((q) => (
                   <button
@@ -256,20 +305,20 @@ export function AssistantView() {
               ) : (
                 <div key={i} className="flex justify-start">
                   <div className="max-w-[85%] space-y-2">
-                    {/* Agent 工作流：理解 → 检索 → 精排 → 生成，实时阶段状态 + 可展开调用轨迹 */}
-                    {(m.steps?.length || (busy && i === messages.length - 1)) && (() => {
-                      const streaming = busy && i === messages.length - 1;
-                      const labels = (m.steps || []).map((s) => s.label);
-                      const has = (re: RegExp) => labels.some((l) => re.test(l));
-                      const done = [
-                        labels.length > 0,
-                        has(/精排|检索完成/),
-                        has(/检索完成/),
-                        !streaming && !!m.content,
-                      ];
-                      const activeIdx = done.findIndex((d) => !d);
-                      const lastStep = m.steps?.[m.steps.length - 1];
-                      return (
+                        {/* 工作流阶段由服务端下发的 phase 字段驱动（不再匹配中文文案） */}
+                        {(m.steps?.length || (busy && i === messages.length - 1)) && (() => {
+                          const streaming = busy && i === messages.length - 1;
+                          const phases = new Set((m.steps || []).map((s) => s.phase).filter(Boolean) as string[]);
+                          const skippedRerank = phases.has('retrieved') && !phases.has('rerank');
+                          const done = [
+                            phases.has('understand'),
+                            phases.has('retrieve'),
+                            skippedRerank || phases.has('rerank'),
+                            phases.has('generate') || (!streaming && !!m.content),
+                          ];
+                          const activeIdx = done.findIndex((d) => !d);
+                          const lastStep = m.steps?.[m.steps.length - 1];
+                          return (
                         <div className="rounded-xl border border-light p-2.5" style={{ background: 'var(--inset)' }}>
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-ui text-[10px] tracking-widest text-ink-soft">AGENT 工作流</span>
@@ -286,7 +335,7 @@ export function AssistantView() {
                           <div className="mt-2 flex items-start">
                             {AGENT_PHASES.map((p, j) => {
                               // 精排阶段仅在真正走了 CrossEncoder 时才算完成，向量服务降级时标记为跳过
-                              const skipped = j === 2 && !has(/精排/) && has(/检索完成/);
+                              const skipped = j === 2 && skippedRerank;
                               const state: 'done' | 'active' | 'idle' | 'skip' = skipped
                                 ? 'skip'
                                 : done[j]
@@ -342,26 +391,50 @@ export function AssistantView() {
                       </div>
                     )}
                     {m.error && (
-                      <div className="rounded-xl px-4 py-2.5 font-ui text-xs" style={{ background: 'rgba(166,124,124,0.1)', color: '#A67C7C' }}>
-                        {m.error}
+                      <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 font-ui text-xs" style={{ background: 'rgba(166,124,124,0.1)', color: '#A67C7C' }}>
+                        <span className="min-w-0 flex-1">{m.error}</span>
+                        {(() => {
+                          const prev = messages.slice(0, i).reverse().find((x) => x.role === 'user');
+                          return prev ? (
+                            <button
+                              onClick={() => {
+                                setInput(prev.content);
+                                setMessages((list) => list.filter((_, k) => k !== i));
+                              }}
+                              className="shrink-0 rounded-full px-2.5 py-0.5 font-ui text-[10px] transition-ink"
+                              style={{ border: '1px solid #A67C7C' }}
+                            >
+                              重试
+                            </button>
+                          ) : null;
+                        })()}
                       </div>
+                    )}
+                    {m.stopped && (
+                      <p className="font-ui text-[10px] text-ink-soft">已停止生成</p>
                     )}
                     {/* RAG 引用溯源 */}
                     {m.related && m.related.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-ui text-[10px] text-ink-soft">RAG 来源：</span>
                         {m.related.slice(0, 5).map((r) => (
-                          <span key={r.id} className="rounded-full px-2 py-0.5 font-ui text-[10px]" style={{ background: 'rgba(107,142,123,0.12)', color: '#6B8E7B' }}>
+                          <Link
+                            key={r.id}
+                            href={`/workbench/explore?q=${encodeURIComponent(r.title)}`}
+                            title={`检索自知识库：〔${r.dynasty}〕${r.author}`}
+                            className="rounded-full px-2 py-0.5 font-ui text-[10px] transition-ink hover:underline hover:underline-offset-2"
+                            style={{ background: 'rgba(107,142,123,0.12)', color: '#6B8E7B' }}
+                          >
                             《{r.title}》
-                          </span>
+                          </Link>
                         ))}
                       </div>
                     )}
                     {m.citations && (
                       <p className="font-ui text-[10px] text-ink-soft">
-                        引用校验 {m.citations.length}/{m.citations.length + (m.invalidCitations?.length || 0)} 通过 · {((m.latencyMs || 0) / 1000).toFixed(1)}s
+                        知识库引用 {m.citations.length} 处 · {((m.latencyMs || 0) / 1000).toFixed(1)}s
                         {m.invalidCitations && m.invalidCitations.length > 0 && (
-                          <span style={{ color: '#A67C7C' }}> · 越界引用已拦截：{m.invalidCitations.join('、')}</span>
+                          <span> · 通用知识补充：{m.invalidCitations.join('、')}</span>
                         )}
                       </p>
                     )}
@@ -375,16 +448,19 @@ export function AssistantView() {
         {/* 输入区 */}
         <div className="border-t border-light p-4">
           <div className="flex items-end gap-2">
-            <VoiceInputButton onText={(t) => setInput((prev) => (prev ? `${prev}${t}` : t))} />
+            <VoiceInputButton
+              onText={(t) => setInput((prev) => (prev ? `${prev}${t}` : t))}
+              onError={show}
+            />
             <textarea
-              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-xl border border-c bg-white/70 px-4 py-2.5 font-ui text-sm leading-relaxed text-ink-deep outline-none transition-ink focus:border-ink-mid"
-              placeholder="输入关于古诗词的问题，Enter 发送…"
+              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-xl border border-c bg-[var(--inset)] px-4 py-2.5 font-ui text-sm leading-relaxed text-ink-deep outline-none transition-ink focus:border-ink-mid"
+              placeholder="有什么想问的？诗词、创作、生活…随便聊，Enter 发送…"
               rows={1}
-              maxLength={200}
+              maxLength={2000}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   send();
                 }
@@ -405,7 +481,7 @@ export function AssistantView() {
               </button>
             )}
           </div>
-          <p className="mt-2 font-ui text-[10px] text-ink-soft">内容由 AI 生成，引用诗篇均来自知识库检索结果 · 回答仅作学习参考</p>
+          <p className="mt-2 font-ui text-[10px] text-ink-soft">AI 生成内容仅供参考，如有诗词相关提问会自动检索知识库</p>
         </div>
       </section>
       <Toast msg={msg} />

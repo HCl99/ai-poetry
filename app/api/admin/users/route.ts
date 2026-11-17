@@ -1,10 +1,11 @@
 import { requireAdmin } from '@/lib/admin';
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
 /** F12 用户管理：列表搜索 + 分页 */
-export async function GET(req: Request) {
+async function GET_impl(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
 }
 
 /** F12 用户管理：角色分配 / 禁用启用 */
-export async function PUT(req: Request) {
+async function PUT_impl(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
@@ -74,3 +75,6 @@ export async function PUT(req: Request) {
   });
   return Response.json({ ...updated, isSelf: false, createdAt: updated.createdAt.toISOString() });
 }
+
+export const GET = withApi(GET_impl);
+export const PUT = withApi(PUT_impl);

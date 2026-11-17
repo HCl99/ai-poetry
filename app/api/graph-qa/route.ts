@@ -4,15 +4,12 @@ import { checkAiRateLimit } from '@/lib/rateLimit';
 import { AGENT_TOOLS, executeAgentTool } from '@/lib/agentTools';
 import { checkCitations } from '@/lib/citationCheck';
 import { screenInput } from '@/lib/content-filter';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 const MAX_TOOL_ROUNDS = 4;
 

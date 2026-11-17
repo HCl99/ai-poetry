@@ -5,13 +5,13 @@ import type { ReactNode } from 'react';
 /** 管理后台通用状态色 */
 export const STATUS_COLORS: Record<string, string> = {
   active: '#6B8E7B', disabled: '#A67C7C',
-  approved: '#6B8E7B', pending: '#C4A965', rejected: '#A67C7C',
+  approved: '#6B8E7B', pending: '#C4A965', rejected: '#A67C7C', withdrawn: '#8B857A',
   open: '#C4A965', resolved: '#6B8E7B',
   admin: '#7B8EA1', user: '#6B8E7B',
 };
 export const STATUS_LABELS: Record<string, string> = {
   active: '正常', disabled: '已禁用',
-  approved: '已通过', pending: '待审核', rejected: '已拒绝',
+  approved: '已通过', pending: '待审核', rejected: '已拒绝', withdrawn: '已撤回',
   open: '待处理', resolved: '已处理',
   admin: '管理员', user: '普通用户',
 };

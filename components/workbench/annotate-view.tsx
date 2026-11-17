@@ -1,23 +1,53 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Star, Link as LinkIcon, BookOpen, Network, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare, Palette } from 'lucide-react';
+import { Sparkles, Star, Link as LinkIcon, BookOpen, Check, Download, Volume2, Square, Share2, Mic, MessagesSquare, AlertTriangle, History } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { useSpeech } from '@/lib/use-speech';
-import { AiBadge } from '@/components/ai-badge';
 import { sseEvents } from '@/lib/sse';
 import { parseAnnotationSections } from '@/lib/sections';
 import { ShareCard, downloadSharePng } from './share-card';
 import { SpeechSettingsPanel } from './speech-panel';
+import { AiStepsPanel } from './annotation/ai-steps-panel';
+import { RelatedPoems } from './annotation/related-poems';
 
 interface PoemItem {
   id: string; title: string; author: string; dynasty: string;
   first: string; tags: string[]; hasAnnotation: boolean;
 }
+
+/* ---- Web Speech API 最小类型声明（标准 DOM lib 未收录非标准 webkit 前缀） ---- */
+interface SpeechRecognitionEventLike {
+  results?: {
+    [i: number]: { [j: number]: { transcript?: string }; isFinal?: boolean; length?: number };
+  };
+}
+interface SpeechRecognitionErrorEventLike {
+  error?: string;
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  /** Chromium 私有方法：立即终止识别（不触发 onend 兜底） */
+  abort?(): void;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((e: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
+}
 type DimKey = 'zici' | 'diangu' | 'qinggan' | 'geli';
 interface Dim { key: DimKey; tag: string; content: string; citation: string }
-interface RelatedPoem { id: string; title: string; author: string; dynasty: string; score?: number | null }
-interface Step { label: string; detail?: string }
+interface RelatedPoem { id: string; title: string; author: string; dynasty: string; score?: number | null; lines?: string[]; matchedLine?: number }
+interface Step { label: string; detail?: string; tool?: string; ms?: number; hits?: number }
 interface Followup { q: string; a: string; related: RelatedPoem[]; done: boolean }
 interface StreamState {
   model: string;
@@ -26,11 +56,16 @@ interface StreamState {
   steps: Step[];
   phase: 'retrieve' | 'generate' | 'done';
   latencyMs?: number;
-  imageryChars?: string[];
+  degraded?: boolean;
+  cached?: boolean;
 }
 
-/** 引用归因高亮：正文中《诗题》若命中本次检索结果，渲染为可识别的归因标记 */
-function renderWithCitations(text: string, related: RelatedPoem[]): React.ReactNode {
+/** 引用归因高亮：《诗题》命中检索结果时可点击，跳到底部诗句定位 */
+function renderWithCitations(
+  text: string,
+  related: RelatedPoem[],
+  onCite?: (r: RelatedPoem) => void,
+): React.ReactNode {
   const titles = new Map(related.map((r) => [r.title, r]));
   const parts = text.split(/(《[^》]{1,30}》)/g);
   if (parts.length === 1) return text;
@@ -39,14 +74,16 @@ function renderWithCitations(text: string, related: RelatedPoem[]): React.ReactN
     const hit = m ? titles.get(m[1]) : undefined;
     if (hit) {
       return (
-        <mark
+        <button
           key={i}
-          title={`引用自检索相似诗篇：《${hit.title}》${hit.author}`}
-          className="rounded px-0.5 font-medium"
+          type="button"
+          onClick={() => onCite?.(hit)}
+          title={`引用自检索相似诗篇：《${hit.title}》${hit.author}，点击定位原句`}
+          className="rounded px-0.5 font-medium underline decoration-dotted underline-offset-2 transition-ink hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6B8E7B]"
           style={{ background: 'rgba(107,142,123,0.18)', color: '#4E6E5D' }}
         >
           {part}
-        </mark>
+        </button>
       );
     }
     return <span key={i}>{part}</span>;
@@ -71,6 +108,8 @@ export function AnnotateView() {
   const [fav, setFav] = useState(false);
   const fullRef = useRef('');
   const [showSteps, setShowSteps] = useState(false);
+  /** 当前展开的引用出处（点击正文《诗题》后定位原句） */
+  const [cite, setCite] = useState<RelatedPoem | null>(null);
   const speech = useSpeech();
   const [vertical, setVertical] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -79,53 +118,42 @@ export function AnnotateView() {
   const shareRef = useRef<HTMLDivElement>(null);
   // 语音念诗搜索：Web Speech Recognition，念诗题/作者即可定位诗篇
   const [listening, setListening] = useState(false);
-  const recogRef = useRef<any>(null);
+  // 录音/识别状态提示（录音中、正在识别）
+  const [asrStatus, setAsrStatus] = useState('');
+  // 检索框内容：语音识别结果会写入这里，回车按全库检索
+  const [query, setQuery] = useState('');
+  const mediaRef = useRef<{ rec: MediaRecorder; stream: MediaStream; timer: ReturnType<typeof setTimeout> } | null>(null);
   // 多轮追问：每次追问独立检索知识库，引用硬约束与主注解一致
   const [followups, setFollowups] = useState<Followup[]>([]);
   const [fuInput, setFuInput] = useState('');
   const [fuLoading, setFuLoading] = useState(false);
   const fuAbortRef = useRef<AbortController | null>(null);
-  // 多模态联动：注解完成后按识别意象自动生成水墨意境图，随分享卡一并导出
-  const [inkUrl, setInkUrl] = useState<string | null>(null);
-  const [inkLoading, setInkLoading] = useState(false);
-  const [inkError, setInkError] = useState('');
-  const [inkChars, setInkChars] = useState<string[]>([]);
 
-  // 换诗时清空上一首的意境配图
-  useEffect(() => {
-    setInkUrl(null);
-    setInkError('');
-    setInkLoading(false);
-    setInkChars([]);
-  }, [selected?.id]);
+  // 搜索无结果提示（不只是 toast，界面需明确告诉用户库里没有这首）
+  const [notFound, setNotFound] = useState('');
 
-  /**
-   * 生成水墨意境图：优先使用注解识别的意象（AI 对诗的理解），无则回退诗标签。
-   * auto=true 时由注解完成自动触发，失败静默降级为手动按钮，不弹错不打扰。
-   */
-  async function genInk(chars?: string[], auto = false) {
-    if (!selected || inkLoading) return;
-    const useChars = (chars && chars.length > 0 ? chars : selected.tags).slice(0, 3);
-    setInkChars(useChars);
-    setInkLoading(true);
-    if (!auto) setInkError('');
-    try {
-      const prompt = `中国水墨画，《${selected.title}》意境，${useChars.join('、')}意象，留白意境`;
-      const r = await fetch('/api/inkpaint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || '生成失败');
-      setInkUrl(d.url);
-      if (!auto) show('意境图已生成，导出分享图将自动收录该配图');
-    } catch (e: any) {
-      if (!auto) setInkError(e?.message || '意境图生成失败，请重试');
-    } finally {
-      setInkLoading(false);
-    }
+  // 搜索历史：最近选择过的诗篇，持久化到 localStorage，刷新后仍可回看
+  const [history, setHistory] = useState<PoemItem[]>([]);
+
+  /** 把一首诗加入搜索历史（去重置顶，最多 10 条，持久化到 localStorage） */
+  function addToHistory(p: PoemItem) {
+    setHistory((prev) => {
+      const next = [p, ...prev.filter((h) => h.id !== p.id)].slice(0, 10);
+      try { localStorage.setItem('annotate-history', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   }
+
+  // 启动时从 localStorage 恢复搜索历史
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('annotate-history');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) setHistory(arr.slice(0, 10));
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   /** 中断当前流式生成，已流式内容保留 */
   function stopGenerate() {
@@ -178,46 +206,97 @@ export function AnnotateView() {
         }
         setPoems(final);
         const target = pid ? final.find((p) => p.id === pid) : null;
-        setSelected(target || final[0] || null);
+        const first = target || final[0] || null;
+        setSelected(first);
+        if (first) {
+          setQuery(`《${first.title}》 ${first.author}`);
+          addToHistory(first);
+        }
       })
       .catch(() => setError('诗词列表加载失败'));
-    // 卸载时终止语音识别
-    return () => recogRef.current?.abort?.();
+    // 卸载时停止录音
+    return () => stopRecording();
   }, []);
 
-  /** 语音念诗：识别 → 检索 → 定位诗篇（与朗读输出构成语音闭环） */
-  function startVoiceSearch() {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { show('当前浏览器不支持语音识别，请使用 Chrome / Edge'); return; }
-    if (listening) { recogRef.current?.stop(); setListening(false); return; }
-    const recog = new SR();
-    recogRef.current = recog;
-    recog.lang = 'zh-CN';
-    recog.interimResults = false;
-    recog.maxAlternatives = 1;
-    recog.onresult = (e: any) => {
-      const text = (e.results?.[0]?.[0]?.transcript as string || '').trim();
-      setListening(false);
-      if (text) voiceSearch(text);
-    };
-    recog.onerror = (e: any) => {
-      setListening(false);
-      if (e?.error === 'not-allowed') show('麦克风权限被拒绝，请在浏览器中允许');
-      else if (e?.error === 'no-speech') show('未听到声音，请再念一次');
-      else show('语音识别失败，请重试');
-    };
-    recog.onend = () => setListening(false);
-    setListening(true);
-    show('请念诗题或作者…');
-    try { recog.start(); } catch { setListening(false); }
+  /**
+   * 语音转文字：浏览器录音（MediaRecorder）→ /api/asr → 本地 faster-whisper 识别 → 写入检索框。
+   * 不再依赖 Chrome 的 Web Speech（其识别要连 Google 服务，国内网络下必然失败）。
+   * 点一次开始录音，说完再点一次结束；最长 10 秒自动结束。
+   */
+  async function startVoiceSearch() {
+    if (listening) { stopRecording(); return; }
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      show('当前浏览器不支持录音，请使用 Chrome / Edge');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const chunks: BlobPart[] = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setListening(false);
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        if (blob.size < 1200) { setAsrStatus(''); show('没有录到声音，请靠近麦克风再试'); return; }
+        setAsrStatus('正在识别…');
+        try {
+          const fd = new FormData();
+          fd.append('audio', blob, 'voice.webm');
+          const r = await fetch('/api/asr', { method: 'POST', body: fd });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || '语音识别失败');
+          const text = String(d.text || '').trim();
+          if (!text) { show('没听清，请再说一次'); return; }
+          // 识别结果先写进输入框，再自动检索定位诗篇
+          setQuery(text);
+          show(`识别到「${text}」`);
+          voiceSearch(text);
+        } catch (e: unknown) {
+          show(e instanceof Error ? e.message : '语音识别失败，请重试');
+        } finally {
+          setAsrStatus('');
+        }
+      };
+      rec.start();
+      mediaRef.current = { rec, stream, timer: setTimeout(() => stopRecording(), 10000) };
+      setListening(true);
+      setAsrStatus('录音中，说完再点一次麦克风');
+    } catch (e: unknown) {
+      const name = e instanceof Error ? e.name : '';
+      show(name === 'NotAllowedError' ? '麦克风权限被拒绝，请在地址栏允许后重试' : '无法访问麦克风，请检查设备');
+    }
+  }
+
+  /** 结束录音并触发识别 */
+  function stopRecording() {
+    const m = mediaRef.current;
+    if (!m) return;
+    clearTimeout(m.timer);
+    mediaRef.current = null;
+    if (m.rec.state !== 'inactive') m.rec.stop();
+    setListening(false);
   }
 
   async function voiceSearch(text: string) {
     try {
       const r = await fetch(`/api/poems/list?q=${encodeURIComponent(text)}&limit=10`);
       const list: PoemItem[] = await r.json();
-      if (!list.length) { show(`未找到「${text}」相关诗篇，可念诗题或作者名`); return; }
-      // 命中结果并入候选列表并选中，念完即可 Enter 生成注解
+      if (!list.length) {
+        // 无结果：清空当前选中诗篇与注解结果，只保留「暂无该数据」提示，
+        // 避免旧诗卡还杵在那让用户误以为没反应
+        abortRef.current?.abort();
+        setSelected(null);
+        setStream(null);
+        setFollowups([]);
+        setFav(false);
+        setNotFound(text);
+        show(`诗库中暂无「${text}」相关内容，请检查输入或换个关键词`);
+        return;
+      }
+      // 有结果则清除无结果提示，并把命中诗篇并入候选
+      setNotFound('');
       setPoems((prev) => {
         const ids = new Set(prev.map((p) => p.id));
         return [...list.filter((p) => !ids.has(p.id)), ...prev];
@@ -227,11 +306,40 @@ export function AnnotateView() {
       setStream(null);
       setFollowups([]);
       setFav(false);
-      show(`识别到「${text}」· 已定位《${list[0].title}》，按 Enter 生成注解`);
+      addToHistory(list[0]);
+      show(`已定位《${list[0].title}》，按 Enter 生成注解`);
     } catch {
-      show('语音搜索失败，请重试');
+      show('检索失败，请重试');
     }
   }
+
+  /** 输入框里选中的候选诗篇 */
+  function selectPoem(p: PoemItem) {
+    abortRef.current?.abort();
+    setSelected(p);
+    setQuery(`《${p.title}》 ${p.author}`);
+    setStream(null);
+    setFollowups([]);
+    setFav(false);
+    setNotFound('');
+    addToHistory(p);
+  }
+
+  // 输入框候选：本地 50 首之外的诗也要能搜到，改为防抖请求全库（按标题/作者匹配）
+  const [suggestions, setSuggestions] = useState<PoemItem[]>([]);
+  useEffect(() => {
+    const q = query.replace(/[《》\s]/g, '');
+    if (!q) { setSuggestions([]); return; }
+    // 选中后输入框会被格式化成《题》 作者，此时不再请求
+    if (query.startsWith('《')) { setSuggestions([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/poems/list?q=${encodeURIComponent(q)}&limit=8`);
+        if (r.ok) setSuggestions(await r.json());
+      } catch { /* 网络异常时保留上一次候选 */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
   async function generate() {
     if (!selected || loading) return;
@@ -266,7 +374,11 @@ export function AnnotateView() {
         if (event === 'step') {
           setStream((s) => {
             const base = s ?? ensure({});
-            return { ...base, phase: 'retrieve', steps: [...base.steps, { label: data.label, detail: data.detail }] };
+            return {
+              ...base,
+              phase: 'retrieve',
+              steps: [...base.steps, { label: data.label, detail: data.detail, tool: data.tool, ms: data.ms, hits: data.hits }],
+            };
           });
         } else if (event === 'meta') {
           setStream((s) => ({
@@ -290,25 +402,22 @@ export function AnnotateView() {
         } else if (event === 'error') {
           throw new Error(data.error || '生成失败');
         } else if (event === 'done') {
-          const chars = (data.imageryChars as string[] | undefined) || [];
           setStream((s) =>
             s
-              ? { ...s, phase: 'done', latencyMs: data.latencyMs, dims: data.dimensions as Dim[], imageryChars: chars }
+              ? { ...s, phase: 'done', latencyMs: data.latencyMs, dims: data.dimensions as Dim[], related: (data.related as RelatedPoem[]) || s.related, degraded: data.degraded as boolean | undefined, cached: data.cached as boolean | undefined }
               : s,
           );
           show('AI注解完成');
-          // 多模态融合：注解完成后自动按识别意象生成意境图（静默模式，失败不打扰）
-          if (chars.length > 0) genInk(chars, true);
         }
       }
-    } catch (e: any) {
-      if (e?.name === 'AbortError') {
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
         // 用户主动停止：保留已流式内容，标记完成态以便朗读/导出
         setStream((s) => (s ? { ...s, phase: 'done' } : s));
         show('已停止生成，保留已生成内容');
         return;
       }
-      setError(e.message || '网络异常，请重试');
+      setError(e instanceof Error ? e.message : '网络异常，请重试');
     } finally {
       setLoading(false);
     }
@@ -358,14 +467,14 @@ export function AnnotateView() {
           update({ related: (data.related as RelatedPoem[]) || [], done: true });
         }
       }
-    } catch (e: any) {
-      if (e?.name === 'AbortError') {
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
         update({ done: true });
         show('已停止追问，保留已生成内容');
         return;
       }
       update({ done: true });
-      show(e?.message || '追问失败，请重试');
+      show(e instanceof Error ? e.message : '追问失败，请重试');
     } finally {
       setFuLoading(false);
     }
@@ -446,46 +555,90 @@ export function AnnotateView() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-5">
         {/* 左栏：诗词选择 */}
         <div className="space-y-5 lg:col-span-2">
           <div className="paper-card p-6">
             <h2 className="mb-3 font-ui text-[15px] font-medium text-ink-deep">选择诗词</h2>
             <div className="flex gap-2">
-              <select
-                value={selected?.id || ''}
-                onChange={(e) => {
-                  abortRef.current?.abort();
-                  setSelected(poems.find((p) => p.id === e.target.value) || null);
-                  setStream(null);
-                  setFollowups([]);
-                  setFav(false);
-                }}
-                className="h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
-              >
-                {poems.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    《{p.title}》 {p.author}{p.hasAnnotation ? ' · 已有赏析' : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="relative min-w-0 flex-1">
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); if (query.trim()) voiceSearch(query.trim()); }
+                  }}
+                  placeholder="输入或念出诗题 / 作者，回车检索"
+                  className="h-11 w-full rounded-lg border-[1.5px] border-c bg-white/70 px-3 font-ui text-sm outline-none transition-ink focus:border-ink-deep"
+                  aria-label="按诗题或作者检索诗词"
+                />
+                {suggestions.length > 0 && (
+                  <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-auto rounded-lg border border-c bg-white py-1 shadow-lg">
+                    {suggestions.map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectPoem(p); }}
+                          className="block w-full px-3 py-2 text-left font-ui text-sm text-ink-deep hover:bg-paper-dark"
+                        >
+                          《{p.title}》 <span className="text-ink-soft">{p.author}</span>
+                          {p.hasAnnotation && <span className="ml-1 text-[11px] text-sepia">· 已有赏析</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <button
                 onClick={startVoiceSearch}
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-ink ${listening ? 'anim-pulse-ring' : 'hover:bg-paper-dark'}`}
                 style={listening ? { background: 'var(--rose)', color: '#fff' } : { background: 'var(--inset)', color: 'var(--ink-mid)' }}
-                title={listening ? '正在聆听，再次点击取消' : '语音念诗：念诗题或作者即可定位'}
+                title={listening ? '正在聆听，再次点击取消' : '语音念诗：念诗题或作者，识别结果写入输入框'}
                 aria-label="语音念诗搜索"
               >
                 <Mic className="h-4 w-4" />
               </button>
             </div>
             <p className="mt-1.5 font-ui text-xs text-ink-soft">
-              {listening ? '正在聆听…请念诗题或作者' : '支持语音念诗：点麦克风念「静夜思」或「李白」试试'}
+              {asrStatus || '点麦克风说话（说完再点一次结束），识别出的文字会写进上面的输入框；也可手动输入诗题 / 作者后回车检索'}
             </p>
+
+            {/* 无结果提示：明确告诉用户诗库中没有该数据 */}
+            {notFound && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2.5 font-ui text-xs" style={{ background: 'color-mix(in srgb, var(--rose) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--rose) 30%, transparent)' }}>
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--rose)' }} />
+                <div>
+                  <span className="font-medium" style={{ color: 'var(--rose)' }}>诗库中暂无「{notFound}」相关数据</span>
+                  <span className="text-ink-mid">。请检查输入是否有误，或尝试其他诗题 / 作者名。</span>
+                </div>
+              </div>
+            )}
+
+            {/* 搜索历史：最近查看过的诗篇，点击可快速回到 */}
+            {history.length > 0 && (
+              <div className="mt-4">
+                <div className="mb-1.5 flex items-center gap-1.5 font-ui text-xs font-medium text-ink-soft">
+                  <History className="h-3.5 w-3.5" /> 最近看过
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {history.map((h) => (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onClick={() => selectPoem(h)}
+                      className="rounded-full border border-c bg-white/70 px-2.5 py-1 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
+                      title={`《${h.title}》 ${h.author}`}
+                    >
+                      《{h.title.length > 8 ? h.title.slice(0, 8) + '…' : h.title}》
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {selected && (
               <>
-                <div className="relative mt-5 rounded-lg p-6" style={{ background: 'var(--inset)' }}>
+                <div className="relative mt-5 max-h-[400px] overflow-y-auto rounded-lg p-6" style={{ background: 'var(--inset)' }}>
                   <div className="absolute right-3 top-3 flex items-center gap-1">
                     <button
                       onClick={() => setVertical((v) => !v)}
@@ -506,23 +659,34 @@ export function AnnotateView() {
                   </div>
                   <div className="text-center">
                     <span className={`dynasty-tag ${DYNASTY_CLASS[selected.dynasty] || 'dynasty-tang'}`}>{selected.dynasty}</span>
-                    <h3 className="mt-2 font-brush text-2xl text-ink-deep">{selected.title}</h3>
+                    <h3 className="mt-2 font-serif text-2xl font-medium text-ink-deep">{selected.title}</h3>
                     <p className="mt-1 font-ui text-xs text-ink-soft">{selected.author}</p>
                   </div>
                   <div className="my-4 ink-divider" />
                   {vertical ? (
                     <div className="relative">
-                      <div
-                        className="mx-auto overflow-x-auto py-1 font-serif text-base text-ink-mid"
-                        style={{ writingMode: 'vertical-rl', height: 300, letterSpacing: '0.3em' }}
-                      >
+                      {/* 每句一列竖排：外层不设 writing-mode，flex 才是横向排布；列高由内容决定，长诗自动换行，不再用固定 300px 高度 */}
+                      <div className="flex flex-row-reverse flex-wrap items-start justify-center gap-x-3 gap-y-2 py-1">
                         {selected.first ? poemLinesOf(selected.first).map((l, i) => (
-                          <p key={i} style={{ marginLeft: i === 0 ? 0 : '1.2em', lineHeight: 1.9, ...(speech.speakingKey === 'poem' && speech.activeLine === i + 1 ? { background: 'rgba(107,142,123,0.18)', borderRadius: 4 } : {}) }}>{l}</p>
+                          <p
+                            key={i}
+                            className="font-serif text-base text-ink-mid"
+                            style={{
+                              writingMode: 'vertical-rl',
+                              letterSpacing: '0.18em',
+                              lineHeight: 1.9,
+                              ...(speech.speakingKey === 'poem' && speech.activeLine === i + 1
+                                ? { background: 'rgba(107,142,123,0.18)', borderRadius: 4 }
+                                : {}),
+                            }}
+                          >
+                            {l}
+                          </p>
                         )) : <p>（无正文）</p>}
                       </div>
-                      {/* 印章点缀 */}
+                      {/* 印章点缀：放在诗列下方居中，不再绝对定位压住末列 */}
                       <span
-                        className="absolute bottom-1 left-1 flex h-9 w-9 flex-col items-center justify-center rounded font-brush text-[11px] leading-[1.1] text-white"
+                        className="mx-auto mt-3 flex h-9 w-9 flex-col items-center justify-center rounded font-brush text-[11px] leading-[1.1] text-white"
                         style={{ background: '#A67C7C', boxShadow: '0 1px 4px rgba(166,124,124,0.4)' }}
                       >
                         <span>墨</span><span>韵</span>
@@ -591,7 +755,7 @@ export function AnnotateView() {
 
         {/* 右栏：注解结果 */}
         <div className="lg:col-span-3">
-          <div className="paper-card flex min-h-[560px] flex-col p-6">
+          <div className="paper-card flex min-h-[640px] flex-col p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-ui text-[15px] font-medium text-ink-deep">注解结果</h2>
               {stream && (
@@ -631,38 +795,53 @@ export function AnnotateView() {
 
             {stream && (
               <div className="flex-1 space-y-4">
+                {/* 屏幕阅读器播报：生成阶段与完成结果（视觉上隐藏） */}
+                <div aria-live="polite" aria-atomic="true" className="sr-only">
+                  {loading
+                    ? '正在生成四维度注解，已进入' + (stream.phase === 'retrieve' ? '检索阶段' : '生成阶段')
+                    : isDone
+                      ? `注解完成，检索命中 ${stream.related.length} 篇，共 ${stream.steps.length} 步工具调用`
+                      : ''}
+                </div>
                 {/* 完成后可回看检索与思考过程 */}
                 {isDone && stream.steps.length > 0 && (
                   <button
                     onClick={() => setShowSteps((v) => !v)}
                     className="font-ui text-xs text-muted-blue transition-ink hover:underline"
                   >
-                    {showSteps ? '收起检索过程 ▲' : `查看 AI 检索与思考过程（${stream.steps.length} 步）▼`}
+                    {showSteps ? '收起思考轨迹 ▲' : `查看思考轨迹（${stream.steps.length} 步）▼`}
                   </button>
                 )}
 
-                {/* 思考过程：生成中实时展示，完成后可折叠回看 */}
+                {/* AI 链路：从向量化 → 检索 → 精排 → 小传 → 生成，逐步展示所用技术 */}
                 {stream.steps.length > 0 && (loading || showSteps) && (
-                  <div className="rounded-lg p-4" style={{ background: 'rgba(123,142,161,0.06)', border: '1px dashed #C9CFD6' }}>
-                    <div className="mb-2.5 font-ui text-xs font-medium text-muted-blue">AI 检索与思考过程</div>
-                    <ul className="space-y-2">
-                      {stream.steps.map((st, i) => (
-                        <li key={i} className="flex items-start gap-2 font-ui text-xs">
-                          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#6B8E7B' }} />
-                          <span className="text-ink-mid">{st.label}</span>
-                          {st.detail && <span className="text-ink-soft/80">· {st.detail}</span>}
-                        </li>
-                      ))}
-                      {loading && (
-                        <li className="flex items-center gap-2 font-ui text-xs text-ink-soft">
-                          <span className="h-3.5 w-3.5 shrink-0" />
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#7B8EA1' }} />
-                            {stream.phase === 'retrieve' ? '正在检索知识库…' : '大模型正在撰写四维度注解…'}
-                          </span>
-                        </li>
-                      )}
-                    </ul>
+                  <AiStepsPanel
+                    steps={stream.steps}
+                    model={stream.model}
+                    related={stream.related}
+                    latencyMs={stream.latencyMs}
+                    phase={stream.phase}
+                    loading={loading}
+                  />
+                )}
+
+                {/* 缓存命中提示 */}
+                {stream.cached && (
+                  <div className="mb-4 flex items-center gap-2 rounded-lg px-3.5 py-2.5 font-ui text-xs" style={{ background: 'color-mix(in srgb, var(--sage) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--sage) 30%, transparent)' }}>
+                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--sage)' }} />
+                    <span className="font-medium" style={{ color: 'var(--sage)' }}>命中注解缓存</span>
+                    <span className="text-ink-mid">，本次结果为该诗历史注解，秒级返回。</span>
+                  </div>
+                )}
+
+                {/* 降级提示：向量检索不可用时显式告知用户 */}
+                {stream.degraded && !stream.cached && (
+                  <div className="mb-4 flex items-start gap-2 rounded-lg px-3.5 py-2.5 font-ui text-xs" style={{ background: 'color-mix(in srgb, var(--sepia) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--sepia) 30%, transparent)' }}>
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--sepia)' }} />
+                    <div>
+                      <span className="font-medium" style={{ color: 'var(--sepia-dark)' }}>向量检索服务暂不可用</span>
+                      <span className="text-ink-mid">，本次注解已降级为「意象共现检索」，引用精度可能略低。可在本地启动 BGE 嵌入服务恢复向量检索。</span>
+                    </div>
                   </div>
                 )}
 
@@ -690,7 +869,7 @@ export function AnnotateView() {
                       </div>
                       {d.content ? (
                         <p className="font-ui text-[15px] leading-relaxed text-ink-mid">
-                          {renderWithCitations(d.content, stream.related)}
+                          {renderWithCitations(d.content, stream.related, setCite)}
                           {active && <span className="ml-0.5 inline-block animate-pulse text-sepia">▍</span>}
                         </p>
                       ) : (
@@ -706,21 +885,7 @@ export function AnnotateView() {
                 })}
 
                 {/* 向量语义检索到的相似诗篇（meta 到达即可见，体现先检索后生成） */}
-                {stream.related.length > 0 && (
-                  <div className="rounded-lg p-4" style={{ border: '1px dashed var(--border-c)', background: 'rgba(123,142,161,0.05)' }}>
-                    <div className="mb-2 flex items-center gap-1.5 font-ui text-xs font-medium text-muted-blue">
-                      <Network className="h-3.5 w-3.5" /> RAG · 向量语义检索到的相似诗篇
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {stream.related.map((r) => (
-                        <span key={r.id} className="rounded-full bg-white/70 px-3 py-1 font-ui text-xs text-ink-mid">
-                          《{r.title}》 {r.author}
-                          {r.score != null && <span className="ml-1 text-sepia">{(r.score * 100).toFixed(0)}%</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <RelatedPoems related={stream.related} />
 
                 {isDone && (
                   <div className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
@@ -734,8 +899,8 @@ export function AnnotateView() {
                             <span className="max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 font-ui text-sm" style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}>{f.q}</span>
                           </div>
                           <div className="rounded-lg p-3 font-ui text-sm leading-relaxed text-ink-mid" style={{ borderLeft: '3px solid #6B8E7B', background: 'var(--paper-light)' }}>
-                            {f.a ? (
-                              renderWithCitations(f.a, f.related)
+                              {f.a ? (
+                              renderWithCitations(f.a, f.related, setCite)
                             ) : (
                               <span className="inline-block spinner spinner-ink" style={{ width: 14, height: 14 }} />
                             )}
@@ -771,48 +936,54 @@ export function AnnotateView() {
                   </div>
                 )}
 
-                {isDone && selected && (
-                  <div className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-ui text-xs font-medium text-ink-deep">
-                        <Palette className="h-3.5 w-3.5 text-sepia" /> 水墨意境配图 · 由 AI 注解识别意象驱动
-                        <AiBadge className="ml-1" label="AI 绘图" />
+                {/* 引用出处：点击正文《诗题》后定位到原句 */}
+                {cite && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 anim-fade-in"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`引用出处《${cite.title}》`}
+                    onClick={() => setCite(null)}
+                  >
+                    <div
+                      className="max-h-[80vh] w-full max-w-lg overflow-auto rounded-xl p-5"
+                      style={{ background: 'var(--paper-light)', boxShadow: '0 16px 48px rgba(0,0,0,0.25)' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="mb-1 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-poem text-lg text-ink-deep">《{cite.title}》</p>
+                          <p className="font-ui text-xs text-ink-soft">〔{cite.dynasty}〕{cite.author}</p>
+                        </div>
+                        <button
+                          onClick={() => setCite(null)}
+                          className="rounded px-2 py-1 font-ui text-xs text-ink-soft transition-ink hover:bg-paper-dark"
+                        >
+                          关闭
+                        </button>
                       </div>
-                      {inkUrl && !inkLoading && (
-                        <button onClick={() => genInk()} className="font-ui text-xs text-muted-blue transition-ink hover:underline">重新生成</button>
-                      )}
-                    </div>
-                    <p className="mt-1.5 font-ui text-xs text-ink-soft">
-                      {inkChars.length > 0 ? 'AI 从注解中识别的意象：' : '绘图灵感（诗标签）：'}
-                      <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
-                        {(inkChars.length > 0 ? inkChars : selected.tags.slice(0, 4)).map((t) => (
-                          <span key={t} className="rounded-full px-2 py-0.5 font-ui text-xs" style={{ background: 'rgba(139,115,85,0.14)', color: '#8B7355' }}>{t}</span>
-                        ))}
-                      </span>
-                    </p>
-                    {inkLoading && (
-                      <div className="mt-3 flex h-40 items-center justify-center rounded-lg" style={{ background: 'var(--paper-light)' }}>
-                        <span className="spinner spinner-ink" style={{ width: 20, height: 20 }} />
-                        <span className="ml-2 font-ui text-xs text-ink-soft">CogView 正在按意象挥毫…</span>
-                      </div>
-                    )}
-                    {inkError && (
-                      <p className="mt-3 font-ui text-xs" style={{ color: '#A67C7C' }}>
-                        {inkError}{' '}
-                        <button onClick={() => genInk()} className="text-muted-blue transition-ink hover:underline">重试</button>
+                      <p className="mb-3 font-ui text-[11px] text-ink-soft/80">
+                        按与本诗的字面重合度定位，高亮行是最相关的一句
                       </p>
-                    )}
-                    {inkUrl && (
-                      <img src={inkUrl} alt={`《${selected.title}》水墨意境图`} className="mt-3 w-full rounded-lg" loading="lazy" />
-                    )}
-                    {!inkUrl && !inkLoading && !inkError && (
-                      <button
-                        onClick={() => genInk()}
-                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-3.5 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark"
-                      >
-                        <Palette className="h-3.5 w-3.5" /> 手动生成意境配图
-                      </button>
-                    )}
+                      <ol className="space-y-1.5">
+                        {(cite.lines || []).map((ln, i) => (
+                          <li
+                            key={i}
+                            className="rounded px-2 py-1 font-poem text-[15px] leading-relaxed"
+                            style={
+                              i === cite.matchedLine
+                                ? { background: 'rgba(107,142,123,0.18)', color: '#3F5A4A', fontWeight: 600 }
+                                : { color: 'var(--ink-mid, #4A4A4A)' }
+                            }
+                          >
+                            {ln}
+                          </li>
+                        ))}
+                        {!cite.lines?.length && (
+                          <li className="font-ui text-xs text-ink-soft">该篇逐句文本暂未载入</li>
+                        )}
+                      </ol>
+                    </div>
                   </div>
                 )}
 
@@ -857,7 +1028,6 @@ export function AnnotateView() {
               tag: d.tag,
               content: d.content.length > 140 ? `${d.content.slice(0, 140)}…` : d.content || '（无内容）',
             }))}
-            image={inkUrl || undefined}
             footer={`${stream.model} · 耗时 ${((stream.latencyMs ?? 0) / 1000).toFixed(1)}s · ${new Date().toLocaleDateString('zh-CN')}`}
           />
         </div>

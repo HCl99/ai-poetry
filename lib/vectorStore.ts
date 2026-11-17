@@ -76,7 +76,7 @@ async function loadFromCache(): Promise<Store | null> {
     const idIdx = new Map<string, number>();
     cached.ids.forEach((id, i) => idIdx.set(id, i));
     const meta = new Map(Object.entries(cached.meta));
-    console.log(`[vectorStore] cache loaded ${total} vectors (${cached.dims}d) in ${Date.now() - t0}ms`);
+    console.info(`[vectorStore] cache loaded ${total} vectors (${cached.dims}d) in ${Date.now() - t0}ms`);
     return { ids: cached.ids, idIdx, mat, dims: cached.dims, meta, loadedAt: Date.now() };
   } catch (e) {
     console.warn('[vectorStore] 缓存读取失败，回退数据库加载：', (e as Error)?.message);
@@ -135,7 +135,7 @@ async function load(): Promise<Store> {
   });
   const meta = new Map(poems.map((p) => [p.id, { title: p.title, author: p.author, dynasty: p.dynasty }]));
 
-  console.log(`[vectorStore] loaded ${ids.length} vectors (${dims}d) in ${Date.now() - t0}ms`);
+  console.info(`[vectorStore] loaded ${ids.length} vectors (${dims}d) in ${Date.now() - t0}ms`);
   const idIdx = new Map<string, number>();
   ids.forEach((id, i) => idIdx.set(id, i));
   return { ids, idIdx, mat, dims, meta, loadedAt: Date.now() };
@@ -187,6 +187,8 @@ export async function topKSimilar(
   excludeId?: string,
   filter?: (m: { title: string; author: string; dynasty: string }) => boolean,
 ): Promise<VectorHit[]> {
+  // 云端部署（无本地 700MB 向量文件）时置 VECTOR_STORE=off，直接走关键词检索，避免加载超时
+  if ((process.env.VECTOR_STORE || '').trim() === 'off') return [];
   const s = await getStore();
   if (s.ids.length === 0 || queryVec.length !== s.dims) return [];
 

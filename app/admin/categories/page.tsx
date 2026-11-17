@@ -1,43 +1,39 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { useConfirm } from '@/components/confirm-dialog';
 import { PageHead, Empty, inputCls, primaryBtn } from '@/components/admin/ui';
+import { formatSyncTime, useAutoRefresh } from '@/hooks/useAutoRefresh';
 
 interface CatData {
   dynasties: { dynasty: string; count: number }[];
   imagery: { total: number; items: { char: string; count: number }[] };
-  categories: { name: string; count: number }[];
 }
-
-const CAT_DESC: Record<string, string> = {
-  '诗词赏析': '品读名篇、拆解技法的深度赏析帖',
-  '学习心得': '背诵方法、学习路线与打卡记录',
-  '原创诗词': '风格迁移作品与原创习作分享',
-  '问答': '字词句疑惑、典故出处求助',
-};
 
 export default function AdminCategoriesPage() {
   const [q, setQ] = useState('');
   const [data, setData] = useState<CatData | null>(null);
   const [newChar, setNewChar] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recalcBusy, setRecalcBusy] = useState(false);
   const { msg, show } = useToast();
   const confirm = useConfirm();
 
-  const load = useCallback(async (query = q) => {
+  const load = useCallback(async (query = '') => {
     try {
-      const res = await fetch(`/api/admin/categories${query ? `?q=${encodeURIComponent(query)}` : ''}`);
+      const res = await fetch(`/api/admin/categories${query ? `?q=${encodeURIComponent(query)}` : ''}`, { cache: 'no-store' });
       if (!res.ok) throw new Error();
       setData(await res.json());
     } catch {
       show('分类数据加载失败');
     }
-  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [show]);
 
   useEffect(() => { load(''); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 其他管理员/用户端造成的计数变化会自动同步
+  const { lastSync, refresh } = useAutoRefresh(() => { void load(q); }, 15000);
 
   async function addImagery() {
     const char = newChar.trim();
@@ -51,13 +47,32 @@ export default function AdminCategoriesPage() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || '新增失败');
-      show('意象已新增');
+      show('意象已新增，可点「重算」刷新关联数');
       setNewChar('');
-      load();
+      load(q);
     } catch (e: unknown) {
       show((e as Error).message || '新增失败');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function recalcImagery() {
+    setRecalcBusy(true);
+    try {
+      const res = await fetch('/api/admin/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'recalc' }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || '重算失败');
+      show(`已按诗-意象关联重算 ${d.updated} 个意象`);
+      load(q);
+    } catch (e: unknown) {
+      show((e as Error).message || '重算失败');
+    } finally {
+      setRecalcBusy(false);
     }
   }
 
@@ -74,7 +89,7 @@ export default function AdminCategoriesPage() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || '删除失败');
       show('已删除');
-      load();
+      load(q);
     } catch (e: unknown) {
       show((e as Error).message || '删除失败');
     }
@@ -88,7 +103,14 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHead title="分类管理" desc="朝代分布、意象清单与社区帖子分类的维护入口" />
+      <PageHead title="分类管理" desc="朝代分布与意象清单维护；社区发帖分类已独立到「社区分类」" />
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-c bg-white/50 px-3 py-2 font-ui text-[11px] text-ink-soft">
+        <span>统计每 15 秒自动同步 · 上次 {formatSyncTime(lastSync)}</span>
+        <button onClick={() => refresh()} className="inline-flex items-center gap-1 rounded-full border border-c px-2.5 py-1 transition-ink">
+          <RotateCcw className="h-3 w-3" /> 刷新统计
+        </button>
+      </div>
 
       {/* 朝代分布 */}
       <section className="paper-card p-5">
@@ -110,7 +132,7 @@ export default function AdminCategoriesPage() {
       <section className="paper-card p-5">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <h2 className="font-ui text-[15px] font-medium text-ink-deep">意象清单（{data.imagery.total}）</h2>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
               <input
@@ -125,8 +147,12 @@ export default function AdminCategoriesPage() {
             <button disabled={busy} onClick={addImagery} className={primaryBtn} style={{ background: 'var(--btn-grad)' }}>
               <Plus className="h-4 w-4" /> 新增
             </button>
+            <button disabled={recalcBusy} onClick={recalcImagery} className="inline-flex items-center gap-1.5 rounded-lg border border-c px-3 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-50">
+              {recalcBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} 重算关联数
+            </button>
           </div>
         </div>
+        <p className="mb-3 font-ui text-[11px] text-ink-soft">数字为该意象关联的诗词数；新增诗词或删除意象后点「重算关联数」即可刷新。</p>
         {data.imagery.items.length === 0 ? (
           <Empty text="没有匹配的意象" />
         ) : (
@@ -144,18 +170,6 @@ export default function AdminCategoriesPage() {
         )}
       </section>
 
-      {/* 社区分类 */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {data.categories.map((c) => (
-          <div key={c.name} className="paper-card p-5">
-            <div className="flex items-center justify-between">
-              <span className="font-brush text-xl text-ink-deep">{c.name}</span>
-              <span className="font-ui text-sm" style={{ color: '#7B8EA1' }}>{c.count} 帖</span>
-            </div>
-            <p className="mt-1 font-ui text-xs text-ink-soft">{CAT_DESC[c.name]}</p>
-          </div>
-        ))}
-      </section>
       {confirm.dialog}
       <Toast msg={msg} />
     </div>

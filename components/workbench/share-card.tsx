@@ -12,7 +12,6 @@ export interface ShareCardProps {
   poemLines: string[];
   sections?: ShareSection[];
   note?: string;
-  image?: string;
   footer: string;
 }
 
@@ -23,7 +22,7 @@ const SANS = "'Noto Sans SC',system-ui,sans-serif";
  * 水墨风分享卡（离屏渲染后经 html2canvas 合成 PNG）
  * 注意：html2canvas 对 flex gap 支持不完整，间距一律用 margin
  */
-export function ShareCard({ kind, title, subtitle, poemLines, sections, note, image, footer }: ShareCardProps) {
+export function ShareCard({ kind, title, subtitle, poemLines, sections, note, footer }: ShareCardProps) {
   return (
     <div
       style={{
@@ -83,17 +82,6 @@ export function ShareCard({ kind, title, subtitle, poemLines, sections, note, im
           <div style={{ marginTop: 3, fontSize: 12, lineHeight: 1.85, color: '#5D5853', fontFamily: SANS }}>{s.content}</div>
         </div>
       ))}
-
-      {/* 水墨意境图 */}
-      {image && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={image}
-          crossOrigin="anonymous"
-          alt="水墨意境图"
-          style={{ marginTop: 16, width: '100%', borderRadius: 10, border: '1px solid #D4CFC5' }}
-        />
-      )}
 
       {/* 页脚 */}
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', fontSize: 10, color: '#8B857E', fontFamily: SANS }}>

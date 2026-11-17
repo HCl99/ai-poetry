@@ -19,6 +19,8 @@ export async function rerankTopN<T>(
   topN = 5,
 ): Promise<RerankHit<T>[] | null> {
   if (items.length === 0) return [];
+  // 云端部署无精排服务：EMBED_SERVER_URL=off 时直接返回 null，调用方降级为粗排顺序
+  if ((process.env.EMBED_SERVER_URL || '').trim() === 'off') return null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const r = await fetch(`${RERANK_URL}/rerank`, {

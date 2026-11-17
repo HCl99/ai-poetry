@@ -1,11 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Heart, Send, Undo2, Users, Loader2, ScrollText } from 'lucide-react';
+import { Heart, Send, Undo2, Users, Loader2, ScrollText, PenLine } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { ScrollCard } from './scroll-card';
 import { downloadSharePng } from './share-card';
 import { StudySquare } from './study-square';
+import {
+  SHARE_STATUS, canPublishShare, canWithdrawShare, shareChangeNotice, shareStatusBanner, shareTitle,
+} from '@/lib/shareWorkflow';
 
 interface CreationItem {
   id: string;
@@ -17,6 +20,9 @@ interface CreationItem {
   createdAt: string;
   likes: number;
   likedByMe: boolean;
+  shareStatus: string;
+  reviewNote: string | null;
+  flagReason: string | null;
 }
 
 const STYLE_COLORS = ['#6B8E7B', '#7B8EA1', '#A67C7C', '#C4A965', '#8B7355', '#5D5853'];
@@ -34,6 +40,7 @@ function fmtTime(iso: string): string {
 
 export function CommunityView() {
   const [tab, setTab] = useState<'works' | 'study'>('works');
+  const [composeSignal, setComposeSignal] = useState(0);
   const [mine, setMine] = useState<CreationItem[]>([]);
   const [feed, setFeed] = useState<CreationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +48,7 @@ export function CommunityView() {
   const [scrollTarget, setScrollTarget] = useState<CreationItem | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { msg, show } = useToast();
+  const prevStatus = useRef<Map<string, string>>(new Map());
 
   /** 导出诗画长卷 PNG：社区创作 → 竖排右起长卷图 */
   async function exportScroll(c: CreationItem) {
@@ -51,7 +59,8 @@ export function CommunityView() {
       if (!scrollRef.current) throw new Error();
       await downloadSharePng(scrollRef.current, `诗画长卷-${c.style}-${Date.now()}.png`);
       show('已导出诗画长卷');
-    } catch {
+    } catch (e) {
+      console.error('[exportScroll]', e);
       show('长卷导出失败，请重试');
     } finally {
       setScrollTarget(null);
@@ -60,10 +69,22 @@ export function CommunityView() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/community');
+      const r = await fetch('/api/community', { cache: 'no-store' });
       if (!r.ok) throw new Error();
       const d = await r.json();
-      setMine(d.mine || []);
+      const nextMine: CreationItem[] = d.mine || [];
+      // 轮询时对比状态，审核结果变化给一次提示
+      for (const c of nextMine) {
+        const prev = prevStatus.current.get(c.id);
+        if (!prev) continue;
+        const notice = shareChangeNotice(
+          shareTitle(c.style, c.content).split(' · ')[1] || c.style,
+          prev, c.shareStatus, c.reviewNote,
+        );
+        if (notice) show(notice);
+      }
+      prevStatus.current = new Map(nextMine.map((c) => [c.id, c.shareStatus]));
+      setMine(nextMine);
       setFeed(d.feed || []);
     } catch {
       show('社区数据加载失败');
@@ -73,37 +94,49 @@ export function CommunityView() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, [load]);
 
-  /** 发布/取消发布自己的作品 */
+  /** 发布/撤回自己的作品 */
   async function togglePublish(c: CreationItem) {
+    const withdraw = canWithdrawShare(c.shareStatus, true) && c.shareStatus !== SHARE_STATUS.REJECTED;
+    if (!withdraw && !canPublishShare(c.shareStatus)) {
+      show('当前状态不可操作，请刷新后重试');
+      return;
+    }
     setPending(c.id);
     try {
       const r = await fetch('/api/community', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: c.createdAt && isPublished(c) ? 'unpublish' : 'publish', creationId: c.id }),
+        body: JSON.stringify({ action: withdraw ? 'unpublish' : 'publish', creationId: c.id }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      const published = d.isPublic;
-      setMine((list) => list.map((x) => (x.id === c.id ? { ...x, likes: d.likes } : x)));
-      if (published) {
-        setFeed((list) => [{ ...c, likedByMe: false }, ...list.filter((x) => x.id !== c.id)]);
-        show('已发布到分享广场');
+      const next: string = d.shareStatus;
+      setMine((list) => list.map((x) => (
+        x.id === c.id ? { ...x, shareStatus: next, reviewNote: next === SHARE_STATUS.REJECTED ? x.reviewNote : null } : x
+      )));
+      if (next === SHARE_STATUS.APPROVED) {
+        setFeed((list) => [{ ...c, shareStatus: next, likedByMe: false }, ...list.filter((x) => x.id !== c.id)]);
       } else {
         setFeed((list) => list.filter((x) => x.id !== c.id));
-        show('已从分享广场撤回');
       }
+      show(
+        next === SHARE_STATUS.PENDING
+          ? '已提交审核，通过后会展示在分享广场'
+          : next === SHARE_STATUS.APPROVED
+            ? '已发布到分享广场'
+            : '已从分享广场撤回',
+      );
+      void load();
     } catch (e: any) {
       show(e?.message || '操作失败');
     } finally {
       setPending(null);
     }
-  }
-
-  /** mine 中该作品当前是否已发布（feed 里存在即已发布） */
-  function isPublished(c: CreationItem): boolean {
-    return feed.some((x) => x.id === c.id);
   }
 
   /** 点赞/取消赞（仅分享广场） */
@@ -147,26 +180,35 @@ export function CommunityView() {
       </div>
 
       {/* Tab：作品社区 / 学习社区 */}
-      <div className="flex gap-2">
-        {([
-          { key: 'works', label: '作品社区' },
-          { key: 'study', label: '学习社区' },
-        ] as const).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className="rounded-full border-[1.5px] px-4 py-1.5 font-ui text-sm transition-ink"
-            style={tab === t.key
-              ? { background: 'var(--btn-bg)', color: 'var(--btn-text)', borderColor: 'var(--btn-bg)' }
-              : { borderColor: 'var(--border-c)', color: 'var(--ink-mid)' }}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {([
+            { key: 'works', label: '作品社区' },
+            { key: 'study', label: '学习社区' },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className="rounded-full border-[1.5px] px-4 py-1.5 font-ui text-sm transition-ink"
+              style={tab === t.key
+                ? { background: 'var(--btn-bg)', color: 'var(--btn-text)', borderColor: 'var(--btn-bg)' }
+                : { borderColor: 'var(--border-c)', color: 'var(--ink-mid)' }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => { setTab('study'); setComposeSignal((n) => n + 1); }}
+          className="flex items-center gap-1.5 rounded-full px-4 py-1.5 font-ui text-sm transition-ink hover:opacity-90"
+          style={{ background: 'var(--btn-grad)', color: '#fff' }}
+        >
+          <PenLine className="h-3.5 w-3.5" /> 发帖交流
+        </button>
       </div>
 
       {tab === 'study' ? (
-        <StudySquare />
+        <StudySquare composeSignal={composeSignal} />
       ) : loading ? (
         <div className="flex items-center justify-center py-20 font-ui text-sm text-ink-soft">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在加载社区…
@@ -185,8 +227,11 @@ export function CommunityView() {
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {mine.map((c) => {
-                  const published = isPublished(c);
                   const cc = styleColor(c.style);
+                  const banner = shareStatusBanner(c.shareStatus);
+                  const withdrawable = canWithdrawShare(c.shareStatus, true) && c.shareStatus !== SHARE_STATUS.REJECTED;
+                  const publishable = canPublishShare(c.shareStatus);
+                  const actionLabel = withdrawable ? '撤回' : c.shareStatus === SHARE_STATUS.PRIVATE ? '发布到广场' : '重新发布';
                   return (
                     <div key={c.id} className="paper-card p-5">
                       <div className="flex items-center justify-between gap-2">
@@ -195,16 +240,28 @@ export function CommunityView() {
                         </span>
                         <button
                           onClick={() => togglePublish(c)}
-                          disabled={pending === c.id}
+                          disabled={pending === c.id || (!withdrawable && !publishable)}
                           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-ui text-xs transition-ink disabled:opacity-50"
-                          style={published
+                          style={withdrawable
                             ? { background: 'var(--inset)', color: '#A67C7C' }
                             : { background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
                         >
                           <Send style={{ height: 12, width: 12 }} />
-                          {published ? '撤回' : '发布到广场'}
+                          {actionLabel}
                         </button>
                       </div>
+                      {banner && (
+                        <div className="mt-3 rounded-lg px-3 py-2 font-ui text-[11px] leading-relaxed" style={{ background: banner.bg, color: banner.color }}>
+                          <div className="font-medium">{banner.title}</div>
+                          <div className="mt-0.5 opacity-90">{banner.hint}</div>
+                          {c.shareStatus === SHARE_STATUS.REJECTED && c.reviewNote && (
+                            <div className="mt-1">审核备注：{c.reviewNote}</div>
+                          )}
+                        </div>
+                      )}
+                      {c.shareStatus === SHARE_STATUS.APPROVED && (
+                        <div className="mt-3 font-ui text-[11px]" style={{ color: '#6B8E7B' }}>已发布在分享广场</div>
+                      )}
                       <p className="mt-3 font-brush text-lg leading-relaxed text-ink-deep" style={{ whiteSpace: 'pre-line' }}>
                         {c.content}
                       </p>

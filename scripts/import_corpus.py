@@ -53,7 +53,8 @@ def flush(force=False):
 
 
 def add(title, author, dynasty, paragraphs, tags, source):
-    author = (author or '').strip() or '佚名'
+    # 作者名同样转简体：宋诗原库作者多为繁体（楊萬里、陸游），直接入库会让用户看不懂
+    author = t2s((author or '').strip()) or '佚名'
     ps_simp = [t2s(p) for p in paragraphs if p]
     if not ps_simp:
         return 0

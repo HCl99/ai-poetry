@@ -2,16 +2,13 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { screenInput } from '@/lib/content-filter';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 const MODEL = 'glm-4v-flash';
 const IMAGE_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Activity, CheckCircle2, FlaskConical, Loader2, Play, Square, XCircle } from 'lucide-react';
+import { Activity, CheckCircle2, Download, FlaskConical, Loader2, Play, Square, XCircle } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
 import { sseEvents } from '@/lib/sse';
 
@@ -11,16 +11,23 @@ interface SampleResult {
   cites: number; valid: number; invalid: string[]; cumRate: number | null; error?: string;
 }
 interface DoneInfo {
-  samples: number; totalCites: number; validCites: number; rate: number | null;
+  samples: number; okSamples: number; failed: number; totalCites: number; validCites: number; rate: number | null;
   avgLatencyMs: number; invalid: { title: string; invalid: string[] }[];
 }
 
 const SIZES = [3, 5, 8];
 
+/** CSV 单元转义：含逗号、引号、换行的字段加引号 */
+function csvCell(v: unknown): string {
+  const s = String(v ?? '');
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 export function RagEvalView() {
   const [size, setSize] = useState(5);
   const [running, setRunning] = useState(false);
   const [samplesMeta, setSamplesMeta] = useState<SampleMeta[]>([]);
+  const [poolSize, setPoolSize] = useState<number | null>(null);
   const [results, setResults] = useState<SampleResult[]>([]);
   const [done, setDone] = useState<DoneInfo | null>(null);
   const { msg, show } = useToast();
@@ -33,7 +40,8 @@ export function RagEvalView() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setRunning(true);
-    setSamplesMeta([]); setResults([]); setDone(null);
+    setSamplesMeta([]); setResults([]); setDone(null); setPoolSize(null);
+    const acc: SampleResult[] = [];
     try {
       const r = await fetch('/api/rag-eval', {
         method: 'POST',
@@ -46,14 +54,36 @@ export function RagEvalView() {
         throw new Error(d.error || '评测启动失败');
       }
       for await (const { event, data } of sseEvents(r)) {
-        if (event === 'meta') setSamplesMeta(data.samples);
-        else if (event === 'sample') setResults((rs) => [...rs.filter((x) => x.i !== data.i), data].sort((x, y) => x.i - y.i));
+        if (event === 'meta') { setSamplesMeta(data.samples); setPoolSize(data.poolSize ?? null); }
+        else if (event === 'sample') {
+          acc.push(data);
+          setResults((rs) => [...rs.filter((x) => x.i !== data.i), data].sort((x, y) => x.i - y.i));
+        }
         else if (event === 'done') { setDone(data); show('评测完成'); }
         else if (event === 'error') throw new Error(data.error || '评测失败');
       }
     } catch (e: any) {
-      if (e?.name === 'AbortError') show('已停止评测');
-      else show(e?.message || '网络异常，请重试');
+      if (e?.name === 'AbortError') {
+        // 停止后给出已完成样本的汇总，而不是让结论凭空消失
+        const ok = acc.filter((x) => !x.error);
+        if (ok.length) {
+          const total = ok.reduce((s, x) => s + x.cites, 0);
+          const valid = ok.reduce((s, x) => s + x.valid, 0);
+          setDone({
+            samples: acc.length,
+            okSamples: ok.length,
+            failed: acc.length - ok.length,
+            totalCites: total,
+            validCites: valid,
+            rate: total ? +((valid / total) * 100).toFixed(1) : null,
+            avgLatencyMs: Math.round(ok.reduce((s, x) => s + (x.latencyMs || 0), 0) / ok.length),
+            invalid: ok.filter((x) => x.invalid.length).map((x) => ({ title: x.title, invalid: x.invalid })),
+          });
+        }
+        show(ok.length ? '已停止评测，结论按已完成样本统计' : '已停止评测');
+      } else {
+        show(e?.message || '网络异常，请重试');
+      }
     } finally {
       setRunning(false);
     }
@@ -65,6 +95,49 @@ export function RagEvalView() {
   const px = (i: number) => PAD + (samplesMeta.length > 1 ? (i / (samplesMeta.length - 1)) * (W - PAD * 2) : (W - PAD * 2) / 2);
   const py = (rate: number) => H - PAD - (rate / 100) * (H - PAD * 2);
 
+  function exportCsv() {
+    if (!results.length) return;
+    const ok = results.filter((r) => !r.error);
+    const total = ok.reduce((s, r) => s + r.cites, 0);
+    const valid = ok.reduce((s, r) => s + r.valid, 0);
+    const rate = total ? `${((valid / total) * 100).toFixed(1)}%` : '—';
+    const avg = ok.length ? Math.round(ok.reduce((s, r) => s + (r.latencyMs || 0), 0) / ok.length) : 0;
+    const lines = [
+      `评测时间,${new Date().toLocaleString('zh-CN')}`,
+      `抽样池(有标签诗篇),${poolSize ?? '—'}`,
+      `样本数,${results.length}`,
+      `成功/失败,${ok.length}/${results.length - ok.length}`,
+      `总引用/合规引用,${total}/${valid}`,
+      `引用归因率(可追溯率),${rate}`,
+      `平均延迟ms(仅成功样本),${avg}`,
+      '',
+      '序号,诗题,作者,朝代,总引用,合规引用,归因率,延迟ms,越界引用,错误',
+      ...results.map((r) => {
+        const meta = samplesMeta.find((m) => m.i === r.i);
+        return [
+          r.i + 1,
+          csvCell(r.title),
+          csvCell(meta?.author ?? ''),
+          csvCell(meta?.dynasty ?? ''),
+          r.cites ?? 0,
+          r.valid ?? 0,
+          r.cites ? `${((r.valid / r.cites) * 100).toFixed(1)}%` : '—',
+          r.latencyMs ?? 0,
+          csvCell(r.invalid.join(' / ')),
+          csvCell(r.error || ''),
+        ].join(',');
+      }),
+    ];
+    const blob = new Blob([`\ufeff${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rag-eval-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    show('评测结果已导出 CSV');
+  }
+
   const finishedCount = results.length;
 
   return (
@@ -72,7 +145,7 @@ export function RagEvalView() {
       <div>
         <h1 className="font-brush text-3xl text-ink-black">RAG 评测面板</h1>
         <p className="mt-1.5 font-ui text-sm text-ink-soft">
-          随机抽样真实跑「检索 → 生成 → 引用校验」闭环，把「引用硬约束防幻觉」从做过变成可复现
+          随机抽样真实跑「检索 → 生成 → 引用校验」闭环，把「引用硬约束 + 越界可查」从做过变成可复现
         </p>
       </div>
 
@@ -117,9 +190,9 @@ export function RagEvalView() {
       {/* 闭环实验基线 */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[
-          { label: '幻觉率（无硬约束基线）', value: '12.5%', note: '离线 A/B 实验 rag_ab_test.py', c: '#A67C7C' },
-          { label: '幻觉率（引用硬约束）', value: '0%', note: '16 条样本越界引用清零', c: '#6B8E7B' },
-          { label: '引用归因率', value: '93.8%', note: '引用可追溯到检索列表', c: '#7B8EA1' },
+          { label: '越界引用（无硬约束基线）', value: '2 / 16', note: '离线 A/B：16 条引用中 2 条为杜撰诗题', c: '#A67C7C' },
+          { label: '越界引用（引用硬约束）', value: '0 / 16', note: '同一批 16 条样本，越界引用清零', c: '#6B8E7B' },
+          { label: '引用归因率', value: '93.8%', note: '口径：引用能在检索列表中追溯到（非内容正确）', c: '#7B8EA1' },
         ].map((s) => (
           <div key={s.label} className="paper-card p-5 text-center">
             <div className="font-brush text-3xl" style={{ color: s.c }}>{s.value}</div>
@@ -128,8 +201,9 @@ export function RagEvalView() {
           </div>
         ))}
       </div>
-
-      {/* 评测控制 */}
+      <p className="-mt-3 font-ui text-[11px] text-ink-soft">
+        以上三张卡来自离线脚本 rag_ab_test.py（种子 7，16 条样本），<strong className="font-medium">仅覆盖「引用是否越界」这一个维度，样本量小，不能外推为整体准确率</strong>；下方闭环可现场复跑。
+      </p>
       <div className="paper-card p-6">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-ui text-sm text-ink-deep">抽样数量</span>
@@ -146,24 +220,42 @@ export function RagEvalView() {
               {s} 首
             </button>
           ))}
-          {running ? (
-            <button
-              onClick={() => abortRef.current?.abort()}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-5 py-2 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5"
-              style={{ background: '#A67C7C' }}
-            >
-              <Square className="h-4 w-4" /> 停止
-            </button>
-          ) : (
-            <button
-              onClick={run}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-5 py-2 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5"
-              style={{ background: 'var(--btn-grad)' }}
-            >
-              <Play className="h-4 w-4" /> 开始评测
-            </button>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {!running && results.length > 0 && (
+              <button
+                onClick={exportCsv}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-c px-3.5 py-2 font-ui text-sm text-ink-mid transition-ink hover:text-ink-deep"
+                title="导出本轮明细与汇总（CSV，可直接用 Excel 打开）"
+              >
+                <Download className="h-4 w-4" /> 导出 CSV
+              </button>
+            )}
+            {running ? (
+              <button
+                onClick={() => abortRef.current?.abort()}
+                className="inline-flex items-center gap-1.5 rounded-lg px-5 py-2 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5"
+                style={{ background: '#A67C7C' }}
+              >
+                <Square className="h-4 w-4" /> 停止
+              </button>
+            ) : (
+              <button
+                onClick={run}
+                className="inline-flex items-center gap-1.5 rounded-lg px-5 py-2 font-ui text-sm font-medium text-white transition-ink hover:-translate-y-0.5"
+                style={{ background: 'var(--btn-grad)' }}
+              >
+                <Play className="h-4 w-4" /> 开始评测
+              </button>
+            )}
+          </div>
         </div>
+        <p className="mt-2 font-ui text-[11px] text-ink-soft">
+          {poolSize != null
+            ? `抽样池：库内有标签诗篇 ${poolSize.toLocaleString()} 首（以经典篇目为主，检索命中率天然偏高）`
+            : '抽样池：库内有标签诗篇'}
+          <span className="mx-1.5">·</span>
+          同一账号短时间内最多 2 次，超出会提示稍后再试
+        </p>
         {(running || finishedCount > 0) && (
           <div className="mt-4">
             <div className="flex items-center justify-between font-ui text-xs text-ink-soft">
@@ -179,6 +271,19 @@ export function RagEvalView() {
           </div>
         )}
       </div>
+
+      {/* 未运行时的空状态说明 */}
+      {!running && !done && results.length === 0 && (
+        <div className="paper-card p-6">
+          <h2 className="mb-3 font-ui text-[15px] font-medium text-ink-deep">这个面板测什么</h2>
+          <ul className="space-y-1.5 font-ui text-xs leading-6 text-ink-soft">
+            <li>· 每首样本都真实走一遍「混合检索 → CrossEncoder 精排 → 注解生成 → 引用校验」，不是回放历史数据。</li>
+            <li>· 归因率 = 回答里引用的诗题能在本次检索列表中追溯到的比例；它衡量「引用是否有据」，<span className="text-ink-deep">不等于内容判断正确</span>。</li>
+            <li>· 样本量仅 3–8 首，单条样本即可让归因率波动 ±10 个百分点，结论仅供趋势参考。</li>
+            <li>· 中途点「停止」会立刻中断后续样本，并按已完成的样本给出汇总。</li>
+          </ul>
+        </div>
+      )}
 
       {/* 样本明细 */}
       {results.length > 0 && (
@@ -225,12 +330,12 @@ export function RagEvalView() {
           <h2 className="mb-1 flex items-center gap-2 font-ui text-[15px] font-medium text-ink-deep">
             <Activity className="h-4 w-4 text-muted-blue" /> 累计归因率曲线
           </h2>
-          <p className="mb-4 font-ui text-xs text-ink-soft">每完成一个样本后的累计引用合规率（合规引用 ÷ 总引用）</p>
+          <p className="mb-4 font-ui text-xs text-ink-soft">每完成一个样本后的累计引用合规率（合规引用 ÷ 总引用）。口径是「能否追溯到检索列表」，不是「内容是否正确」。</p>
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
             {[0, 50, 100].map((v) => (
               <g key={v}>
-                <line x1={PAD} x2={W - PAD} y1={py(v)} y2={py(v)} stroke="#E5DFD4" strokeDasharray="4 4" />
-                <text x={PAD - 6} y={py(v) + 4} textAnchor="end" fontSize="10" fill="#8B857E">{v}%</text>
+                <line x1={PAD} x2={W - PAD} y1={py(v)} y2={py(v)} stroke="var(--border-c)" strokeDasharray="4 4" />
+                <text x={PAD - 6} y={py(v) + 4} textAnchor="end" fontSize="10" fill="var(--ink-soft)">{v}%</text>
               </g>
             ))}
             {curve.length > 1 && (
@@ -242,8 +347,8 @@ export function RagEvalView() {
             {curve.map((p) => (
               <g key={p.x}>
                 <circle cx={px(p.x)} cy={py(p.y)} r="4" fill="#7B8EA1" />
-                <text x={px(p.x)} y={py(p.y) - 9} textAnchor="middle" fontSize="10" fill="#5D5853">{p.y}%</text>
-                <text x={px(p.x)} y={H - 8} textAnchor="middle" fontSize="10" fill="#8B857E">#{p.x + 1}</text>
+                <text x={px(p.x)} y={py(p.y) - 9} textAnchor="middle" fontSize="10" fill="var(--ink-mid)">{p.y}%</text>
+                <text x={px(p.x)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--ink-soft)">#{p.x + 1}</text>
               </g>
             ))}
           </svg>
@@ -258,7 +363,7 @@ export function RagEvalView() {
           </h2>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
-              { label: '评测样本', value: `${done.samples} 首` },
+              { label: '评测样本', value: `${done.samples} 首${done.failed ? `（失败 ${done.failed}）` : ''}` },
               { label: '引用总数', value: `${done.totalCites} 处` },
               { label: '归因率', value: done.rate == null ? '无引用' : `${done.rate}%`, c: done.rate === 100 ? '#6B8E7B' : done.rate != null && done.rate >= 90 ? '#7B8EA1' : '#A67C7C' },
               { label: '平均延迟', value: `${(done.avgLatencyMs / 1000).toFixed(1)}s` },
@@ -269,6 +374,9 @@ export function RagEvalView() {
               </div>
             ))}
           </div>
+          <p className="mt-3 font-ui text-[11px] text-ink-soft">
+            样本量 {done.samples} 首（≤8），单条样本即可让归因率波动约 ±10 个百分点，结论仅供趋势参考，不能作为整体准确率对外表述。
+          </p>
           {done.invalid.length > 0 ? (
             <p className="mt-3 font-ui text-xs" style={{ color: '#A67C7C' }}>
               越界引用：{done.invalid.map((x) => `《${x.title}》→ ${x.invalid.map((t) => `《${t}》`).join('、')}`).join('；')}

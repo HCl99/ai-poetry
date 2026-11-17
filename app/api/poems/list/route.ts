@@ -1,8 +1,9 @@
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request) {
+async function GET_impl(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q')?.trim() || '';
   const id = searchParams.get('id')?.trim() || '';
@@ -24,15 +25,19 @@ export async function GET(req: Request) {
     take: limit,
   });
 
-  return Response.json(
-    poems.map((p) => ({
-      id: p.id,
-      title: p.title,
-      author: p.author,
-      dynasty: p.dynasty,
-      first: ((p.paragraphsSimp as string[] | null) || []).join(''),
-      tags: (p.tags as string[] | null) || [],
-      hasAnnotation: !!p.annotations,
-    })),
-  );
+  const data = poems.map((p) => ({
+    id: p.id,
+    title: p.title,
+    author: p.author,
+    dynasty: p.dynasty,
+    first: ((p.paragraphsSimp as string[] | null) || []).join(''),
+    tags: (p.tags as string[] | null) || [],
+    hasAnnotation: !!p.annotations,
+  }));
+
+  // 按 id 查单篇返回对象本身（不存在时返回 null），调用方可直接当作诗篇使用；
+  // 否则返回数组。前端若拿到数组当对象用，会出现 tags 为 undefined 的渲染崩溃。
+  return Response.json(id ? data[0] ?? null : data);
 }
+
+export const GET = withApi(GET_impl);

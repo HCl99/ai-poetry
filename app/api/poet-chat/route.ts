@@ -3,15 +3,12 @@ import { prisma } from '@/lib/prisma';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { screenInput } from '@/lib/content-filter';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 /** 诗人对话：persona RAG——小传 + 库内代表作构建人设，引用硬约束限定只能谈库内作品 */
 export async function POST(req: Request) {

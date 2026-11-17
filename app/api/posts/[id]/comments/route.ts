@@ -1,11 +1,12 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { findSensitiveWords } from '@/lib/community';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
 /** 学习社区：帖子评论列表（平铺返回，含被回复人昵称，前端组装楼中楼） */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+async function GET_impl(_req: Request, { params }: { params: { id: string } }) {
   const session = await auth();
   const uid = session?.user?.id;
   if (!uid) return Response.json({ error: '未登录' }, { status: 401 });
@@ -41,7 +42,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 /** 学习社区：发表评论（楼中楼：parentId 指向被回复评论；命中敏感词直接拒绝） */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+async function POST_impl(req: Request, { params }: { params: { id: string } }) {
   const session = await auth();
   const uid = session?.user?.id;
   if (!uid) return Response.json({ error: '未登录' }, { status: 401 });
@@ -82,3 +83,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     author: me?.name || '诗友', isMine: true, createdAt: c.createdAt.toISOString(),
   });
 }
+
+export const GET = withApi(GET_impl);
+export const POST = withApi(POST_impl);

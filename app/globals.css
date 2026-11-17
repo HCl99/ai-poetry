@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Edge/IE 会在密码框内注入原生的显示按钮，与自定义眼睛图标重叠成两个；
+   统一隐藏原生控件，只保留组件内那一个 */
+input[type='password']::-ms-reveal,
+input[type='password']::-ms-clear {
+  display: none;
+}
+
+/* ===== 自托管毛笔字体：fonttools 按界面用字子集化（5.8MB → 158KB）=====
+   拆为两级，避免首屏为装饰字体等待完整下载：
+   1) boot 子集只含首屏品牌/标题/数字（约 13KB，preload 直出，决定 LCP）；
+   2) 全量子集承载内页标题用字，由 unicode-range 惰性触发下载。
+   两个 @font-face 用不同 family：.font-brush 先命中 boot，缺失字沿回退链取全量文件，
+   不依赖 @font-face 的声明顺序。未收录字回退楷体。OFL-1.1。 */
+@font-face {
+  font-family: 'Ma Shan Zheng Boot';
+  src: url('/fonts/brush-boot.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+30-39, U+3002, U+4E07, U+4E2A, U+4F4D, U+518C, U+5377, U+56DE, U+58A8, U+5982, U+5BC6, U+5F55, U+5FC3, U+65C5, U+65E7, U+6708, U+6765, U+6B22, U+6CE8, U+767B, U+7801, U+7EE7, U+7EED, U+8272, U+8BD7, U+8FCE, U+97F5, U+9996, U+FF0C;
+}
+
+@font-face {
+  font-family: 'Ma Shan Zheng';
+  src: url('/fonts/brush-ui.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+25, U+28-29, U+2C, U+2E-39, U+B7, U+2014, U+3002, U+300A-300D, U+4E00, U+4E07, U+4E09-4E0A, U+4E0D-4E0E, U+4E2A, U+4E2D, U+4E3A, U+4E49, U+4E4B, U+4E60, U+4E86, U+4E8E, U+4E91-4E92, U+4EA4, U+4EAB, U+4EBA, U+4EC5, U+4ECE, U+4ED6, U+4EE3-4EE5, U+4EEC, U+4F20, U+4F3C, U+4F4D, U+4F55, U+4F5C, U+4F60, U+4F7F, U+4F9B, U+4FA7, U+4FE1, U+5019, U+505A, U+5143, U+5148, U+5165, U+5168, U+5171, U+5173, U+5177, U+5185, U+518C-518D, U+5199, U+51C6, U+51FA, U+5206-5207, U+521B, U+5224, U+522B, U+5230, U+5236-5237, U+529B, U+529F, U+52A8, U+5316, U+5339-533A, U+534F, U+5361, U+5373, U+5377, U+53C1, U+53C8, U+53CD, U+53D1, U+53D6, U+53D8, U+53E4-53E5, U+53EF-53F0, U+53F7, U+5404, U+5408, U+540C, U+540E, U+5411, U+542F, U+5458, U+547D, U+548C, U+54C1, U+54CD, U+5531, U+56DB, U+56DE, U+56FE, U+5728, U+5730, U+573A, U+5747, U+5750, U+5757, U+578B, U+57FA, U+586B, U+5883, U+58A8, U+5904, U+590D, U+5916, U+591A, U+5927, U+5931, U+5982, U+59A8, U+59CB, U+5B57-5B58, U+5B66, U+5B9E, U+5BA1-5BA2, U+5BB9, U+5BC6, U+5BF9, U+5C01, U+5C0F, U+5C40, U+5C42, U+5C4F, U+5C55, U+5C71, U+5DE5, U+5DEE, U+5DF2, U+5E08, U+5E16, U+5E73, U+5E76, U+5E7B, U+5E7F, U+5E8F, U+5E93-5E94, U+5EA6, U+5EF6, U+5EFA, U+5F00, U+5F02, U+5F0F, U+5F15, U+5F20, U+5F55, U+5F71, U+5F84, U+5FC3, U+606F, U+610F, U+611F, U+6210-6211, U+6216, U+6218, U+622A, U+6237, U+6240, U+627E-627F, U+628A, U+62BD, U+62D6, U+62E6, U+6309, U+6362, U+636E, U+6392, U+63A2, U+63A7, U+63D0, U+641C, U+6536, U+653F, U+654F, U+6570, U+6587, U+65B0, U+65B9, U+65C5, U+65E0, U+65E5, U+65E7, U+65F6, U+660E, U+666F, U+667A, U+6682, U+6697, U+66F4, U+6700, U+6708-6709, U+671D, U+672A, U+673A, U+6743, U+6750-6751, U+675F, U+6761, U+6765, U+677F, U+6784, U+679C, U+67E5, U+67F3, U+6807, U+6821, U+6837-6838, U+683C, U+6863, U+68C0, U+6A21, U+6B21-6B22, U+6BCF, U+6BD4, U+6C34, U+6CE8, U+6D3B, U+6D41, U+6D4B, U+6D4F, U+6DE1, U+6DF1, U+6E21, U+6E90, U+6EAF, U+6ED1, U+70B9, U+70BC, U+70ED, U+7167, U+7247, U+73AF-73B0, U+7406, U+751F, U+7528, U+7531, U+753B, U+754C, U+7591, U+767B, U+7684, U+76F4, U+76F8, U+770B, U+771F, U+77E5, U+7801, U+7814, U+786C, U+793A, U+793E, U+79C1, U+79CD, U+79FB, U+7A0B, U+7A77, U+7A7A, U+7AE0, U+7B14, U+7B26, U+7B54, U+7B56, U+7B97, U+7BA1, U+7BB1, U+7BC7, U+7CFB, U+7D20, U+7D22, U+7EA2, U+7EA6, U+7ED3, U+7ED8-7ED9, U+7EE7, U+7EE9, U+7EED, U+7EF4, U+7F6E, U+8001, U+8054, U+80CC, U+80FD, U+81EA, U+8272, U+82B1, U+843D, U+8499, U+853D, U+85CF, U+884C, U+8868, U+88C5, U+8981, U+89C1, U+89C4, U+89C6, U+89C8-89C9, U+89E3, U+89E6, U+8A00, U+8BA1, U+8BA4, U+8BAE, U+8BB0, U+8BC1, U+8BC4, U+8BC6, U+8BCD, U+8BD7, U+8BDD, U+8BED, U+8BEF, U+8BF4-8BF5, U+8BFB, U+8C03, U+8C31, U+8C61, U+8D25-8D26, U+8D4F, U+8D5E, U+8D62, U+8D77, U+8D8A, U+8DD1, U+8DEF, U+8F93, U+8FC1, U+8FC7, U+8FCE, U+8FD1, U+8FD9, U+8FDB, U+8FDE-8FDF, U+8FF7, U+8FFD, U+9002, U+9009, U+9010, U+901A, U+906E, U+90AE, U+90E8, U+914D, U+91CC-91CD, U+91CF, U+9274, U+9519, U+95ED-95EF, U+95F4, U+9605, U+9632, U+9650, U+968F-9690, U+96BE, U+96C6, U+9762, U+97F5, U+9875, U+9879, U+9898, U+98CE, U+98DE, U+9996, U+9A8C, U+9ED8, U+FF01, U+FF0C, U+FF1A-FF1B, U+FF1F;
+}
+
 /* ===== 墨韵诗心 · 水墨Pastel设计系统 ===== */
 :root {
   /* 墨色系 */
@@ -97,7 +128,8 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Noto Serif SC', 'Source Han Serif SC', STSong, serif;
+    /* 正文宋体走系统字体，不再加载 Noto Serif SC 网络字体（约 1.5MB） */
+    font-family: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', STSong, SimSun, serif;
     min-height: 100vh;
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -10%, rgba(123, 142, 161, 0.10), transparent),
@@ -111,10 +143,13 @@
 
 @layer utilities {
   .font-brush {
-    font-family: 'Ma Shan Zheng', 'Noto Serif SC', serif;
+    /* 回退链：boot 子集（首屏字，13KB）→ 全量子集（内页字）→ 楷体兜底
+       boot 未覆盖的字自动回退到全量文件，因此内页无需任何额外改造 */
+    font-family: 'Ma Shan Zheng Boot', 'Ma Shan Zheng', 'KaiTi', 'STKaiti', 'Kaiti SC', serif;
   }
   .font-ui {
-    font-family: 'Noto Sans SC', system-ui, sans-serif;
+    /* 去掉 Noto Sans SC 网络字体：中文系统字体即可，避免为 UI 再拉取约 800KB 字体子集 */
+    font-family: system-ui, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
   }
   .text-ink-black { color: var(--ink-black); }
   .text-ink-deep { color: var(--ink-deep); }
@@ -123,7 +158,7 @@
   .text-sepia { color: #8B7355; }
   .text-rose-c { color: #A67C7C; }
   .text-sage { color: #6B8E7B; }
-  .text-muted-blue { color: #7B8EA1; }
+  .text-muted-blue { color: var(--muted-blue); }
   .text-gold { color: #C4A965; }
   .bg-sepia { background-color: #8B7355; }
   .bg-sage { background-color: #6B8E7B; }
@@ -222,6 +257,7 @@
 @keyframes spinKf {
   to { transform: rotate(360deg); }
 }
+.anim-spin-slow { animation: spinKf 6s linear infinite; }
 @keyframes pulseDotKf {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.8); }
@@ -233,7 +269,6 @@
 }
 .anim-pulse-ring { animation: pulseRing 1.4s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .anim-pulse-ring { animation: none; } }
-html.motion-off .anim-pulse-ring { animation: none; }
 @keyframes floatDrift {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-12px); }
@@ -245,11 +280,6 @@ html.motion-off .anim-pulse-ring { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .anim-page, .anim-fade-up, .anim-fade-in, .anim-scale-in, .anim-float { animation: none; }
 }
-html.motion-off .anim-page,
-html.motion-off .anim-fade-up,
-html.motion-off .anim-fade-in,
-html.motion-off .anim-scale-in,
-html.motion-off .anim-float { animation: none; }
 .anim-scale-in { animation: scaleIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
 .anim-float { animation: floatDrift 6s ease-in-out infinite; }
 .spinner {
@@ -341,6 +371,74 @@ html.motion-off .anim-float { animation: none; }
   animation: caretBlink 1.1s step-end infinite;
 }
 
+/* ===== v2.6 首页书卷展开：纸面自中缝向两侧铺开，两端木轴同步滑出 ===== */
+@keyframes scrollUnfold {
+  from { clip-path: inset(0 50% 0 50% round 18px); }
+  to { clip-path: inset(0 0 0 0 round 18px); }
+}
+@keyframes rollerLeftMove {
+  0% { left: 50%; opacity: 0; transform: translateX(-50%); }
+  15% { opacity: 1; }
+  100% { left: 2px; opacity: 1; transform: translateX(0); }
+}
+@keyframes rollerRightMove {
+  0% { left: 50%; opacity: 0; transform: translateX(-50%); }
+  15% { opacity: 1; }
+  100% { left: calc(100% - 28px); opacity: 1; transform: translateX(0); }
+}
+@keyframes scrollContentIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scrollPoemLine {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.anim-scroll-paper { animation: scrollUnfold 1.05s cubic-bezier(0.22, 0.75, 0.2, 1) both; }
+/* 纸形：上下纸沿按 SVG 路径裁成弧线（id 由首页组件内联定义，objectBoundingBox 自适应宽度） */
+.scroll-paper-shape { clip-path: url(#scroll-wave); }
+/* 木轴：卷起的纸卷 + 鎏金轴头，默认停在两端（关闭动效时即为终态） */
+.scroll-roller {
+  position: absolute;
+  top: 1.5%;
+  bottom: 1.5%;
+  width: 26px;
+  border-radius: 999px;
+  z-index: 20;
+  /* 中间亮、两侧暗，模拟卷成筒的纸面受光 */
+  background:
+    linear-gradient(90deg, rgba(60, 44, 26, 0.55) 0%, rgba(120, 92, 60, 0.25) 12%, rgba(255, 250, 238, 0.55) 34%, rgba(206, 176, 128, 0.65) 50%, rgba(120, 92, 60, 0.3) 72%, rgba(60, 44, 26, 0.5) 100%),
+    linear-gradient(180deg, #cdb289 0%, #a5825a 100%);
+  box-shadow: 0 4px 10px rgba(60, 44, 26, 0.4), inset 0 0 6px rgba(255, 248, 232, 0.5);
+}
+.scroll-roller::before,
+.scroll-roller::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  right: -7px;
+  height: 20px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #f0d79b 0%, #c39a52 45%, #7d5f2b 100%);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.55), 0 2px 3px rgba(0, 0, 0, 0.28);
+}
+.scroll-roller::before { top: -10px; }
+.scroll-roller::after { bottom: -10px; }
+.anim-roller-left {
+  left: 2px;
+  animation: rollerLeftMove 1.05s cubic-bezier(0.22, 0.75, 0.2, 1) both;
+  /* 影子朝纸面内侧投，轴压在纸口上，不再像浮在旁边 */
+  box-shadow: 10px 0 16px -8px rgba(58, 42, 24, 0.5), 0 4px 10px rgba(60, 44, 26, 0.35), inset 0 0 6px rgba(255, 248, 232, 0.5);
+}
+.anim-roller-right {
+  left: calc(100% - 28px);
+  animation: rollerRightMove 1.05s cubic-bezier(0.22, 0.75, 0.2, 1) both;
+  box-shadow: -10px 0 16px -8px rgba(58, 42, 24, 0.5), 0 4px 10px rgba(60, 44, 26, 0.35), inset 0 0 6px rgba(255, 248, 232, 0.5);
+}
+.anim-scroll-content { animation: scrollContentIn 0.7s ease-out 0.72s both; }
+.anim-scroll-poem { animation: scrollContentIn 0.6s ease-out 0.9s both; }
+
 /* 无障碍：用户偏好减少动态效果时全部静止（原型文档 10.4 可访问性） */
 @media (prefers-reduced-motion: reduce) {
   .anim-ink-float,
@@ -349,16 +447,17 @@ html.motion-off .anim-float { animation: none; }
   .anim-ink-spread,
   .anim-ink-reveal,
   .anim-ink-veil,
+  .anim-scroll-paper,
+  .anim-roller-left,
+  .anim-roller-right,
+  .anim-scroll-content,
+  .anim-scroll-poem,
   .type-caret { animation: none; }
 }
-/* 无障碍：设置中手动关闭动效（localStorage 持久化，与系统偏好等效） */
-html.motion-off .anim-ink-float,
-html.motion-off .anim-ink-drift,
-html.motion-off .anim-ink-breathe,
-html.motion-off .anim-ink-spread,
-html.motion-off .anim-ink-reveal,
-html.motion-off .anim-ink-veil,
-html.motion-off .type-caret { animation: none; }
+/* 题签逐列与朱印用的是行内 animation，需 !important 才能被关闭 */
+@media (prefers-reduced-motion: reduce) {
+  .anim-scroll-poem p, .anim-scroll-poem span { animation: none !important; }
+}
 
 /* ===== v2.5 系统首页 / 欢迎卡：古典水墨图景缓慢推移（Ken Burns） ===== */
 @keyframes inkPanZoom {
@@ -368,7 +467,6 @@ html.motion-off .type-caret { animation: none; }
 }
 .anim-ink-pan { animation: inkPanZoom 42s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .anim-ink-pan { animation: none; } }
-html.motion-off .anim-ink-pan { animation: none; }
 
 /* ===== v2.7 登录/注册页交互增强 ===== */
 /* 失败反馈：卡片轻摇 */
@@ -381,12 +479,89 @@ html.motion-off .anim-ink-pan { animation: none; }
 }
 .anim-shake { animation: authShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 
-/* 登录/注册切换：卡片侧滑淡入（品牌区由共享 layout 保持挂载不动） */
+/* 登录/注册切换：卡片侧滑 + 轻微 3D 回正，品牌区由共享 layout 保持挂载不动 */
 @keyframes authSwapIn {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: perspective(1200px) translateX(46px) rotateY(-9deg) scale(0.97); }
+  to { opacity: 1; transform: perspective(1200px) translateX(0) rotateY(0deg) scale(1); }
 }
-.anim-auth-swap { animation: authSwapIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.anim-auth-swap { animation: authSwapIn 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* ===== 登录/注册页增强动效（v3.2，纯 CSS） ===== */
+
+/* 墨尘：自底部缓慢升起，途中左右轻摆，接近顶部淡出 */
+@keyframes inkMoteRise {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.7); }
+  10% { opacity: var(--mote-op, 0.3); }
+  70% { opacity: var(--mote-op, 0.3); }
+  100% { opacity: 0; transform: translate3d(var(--mote-drift, 20px), -110vh, 0) scale(1.1); }
+}
+.anim-mote {
+  animation: inkMoteRise var(--mote-dur, 18s) linear infinite;
+  animation-delay: var(--mote-delay, 0s);
+  will-change: transform, opacity;
+}
+
+/* 标题逐字书写：从左侧揭开，模拟一笔一笔把字写出来 */
+@keyframes brushWrite {
+  0% { clip-path: inset(0 100% 0 0); opacity: 0.55; }
+  18% { opacity: 1; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+.anim-write-char {
+  display: inline-block;
+  animation: brushWrite 0.7s cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+/* 笔尖：随书写进度从左向右移动的小墨点 */
+@keyframes brushTipMove {
+  0% { left: 0%; opacity: 0; }
+  6% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+.anim-brush-tip {
+  position: absolute;
+  bottom: 0.16em;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(58, 56, 53, 0.9) 0%, rgba(58, 56, 53, 0) 72%);
+  filter: blur(0.5px);
+  animation: brushTipMove 1.95s cubic-bezier(0.45, 0, 0.55, 1) 0.15s both;
+}
+
+/* 下落墨点：与上升墨尘反向交错 */
+@keyframes inkMoteFall {
+  0% { opacity: 0; transform: translate3d(0, -10vh, 0) scale(0.8); }
+  12% { opacity: var(--mote-op, 0.3); }
+  85% { opacity: var(--mote-op, 0.3); }
+  100% { opacity: 0; transform: translate3d(var(--mote-drift, 24px), 112vh, 0) scale(1); }
+}
+.anim-mote-fall {
+  animation: inkMoteFall var(--mote-dur, 22s) linear infinite;
+  animation-delay: var(--mote-delay, 0s);
+  will-change: transform, opacity;
+}
+
+/* 星尘微光：原地明暗呼吸 */
+@keyframes inkTwinkle {
+  0%, 100% { opacity: 0.08; transform: scale(0.85); }
+  50% { opacity: 0.55; transform: scale(1.2); }
+}
+.anim-twinkle {
+  animation: inkTwinkle var(--tw-dur, 5s) ease-in-out infinite;
+  animation-delay: var(--tw-delay, 0s);
+  will-change: opacity, transform;
+}
+
+/* 朱印：放大旋转 → 压印回弹，落定后保持轻微倾斜 */
+@keyframes sealStamp {
+  0% { opacity: 0; transform: scale(1.9) rotate(-20deg); }
+  55% { opacity: 1; transform: scale(0.9) rotate(-3deg); }
+  75% { transform: scale(1.08) rotate(-8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-6deg); }
+}
+.anim-seal { animation: sealStamp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 2.2s both; }
 
 /* 昼夜意境：InkBackdrop 按本地时段切换色调（SSR 默认 day，挂载后校正，1.6s 平滑过渡） */
 .ink-moon {
@@ -409,15 +584,12 @@ html.motion-off .anim-ink-pan { animation: none; }
   background: linear-gradient(180deg, rgba(74, 90, 118, 0.16) 0%, rgba(58, 71, 94, 0.09) 60%, rgba(44, 53, 70, 0.06) 100%);
 }
 
-/* 无障碍：v2.7 新增动画统一接入减少动态偏好与手动关闭 */
+/* 无障碍：v2.7 新增动画统一接入减少动态偏好 */
 @media (prefers-reduced-motion: reduce) {
-  .anim-shake, .anim-auth-swap { animation: none; }
+  .anim-shake, .anim-auth-swap, .anim-mote, .anim-mote-fall, .anim-twinkle,
+  .anim-write-char, .anim-brush-tip, .anim-seal { animation: none; }
   .ink-moon, .ink-tint { transition: none; }
 }
-html.motion-off .anim-shake,
-html.motion-off .anim-auth-swap { animation: none; }
-html.motion-off .ink-moon,
-html.motion-off .ink-tint { transition: none; }
 
 /* ===== 加载骨架：墨纸微光横向扫过（v3） ===== */
 @keyframes skeletonShimmer {
@@ -439,4 +611,3 @@ html.motion-off .ink-tint { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   .skeleton-shimmer { animation: none; background-image: none; }
 }
-html.motion-off .skeleton-shimmer { animation: none; background-image: none; }

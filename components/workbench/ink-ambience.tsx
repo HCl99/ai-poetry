@@ -1,6 +1,6 @@
 /**
  * 工作台水墨氛围背景（v2.3 动态化）：比登录页更含蓄的墨晕呼吸 + 墨滴扩散 + 明月轻浮。
- * 纯 CSS 动画（fixed 定位，滚动时恒定），-z 层级不遮挡内容；motion-off 自动静止。
+ * 纯 CSS 动画（fixed 定位，滚动时恒定），-z 层级不遮挡内容。
  */
 export function InkAmbience() {
   return (

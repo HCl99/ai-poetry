@@ -1,8 +1,9 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { dayIndexOf } from '@/lib/daily';
-import { Sparkles, BookOpen, Edit, Star, Route, Flag } from 'lucide-react';
+import { Sparkles, BookOpen, Edit, Star, Route, Flag, BrainCircuit, Layers, Scale, Plug, Images } from 'lucide-react';
 import { HeroCarousel } from '@/components/workbench/hero-carousel';
 
 export const dynamic = 'force-dynamic';
@@ -49,10 +50,71 @@ function prettyQuery(raw: string | null): string {
 const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
 const readable = (c: string) => `color-mix(in srgb, ${c} 70%, var(--ink-deep))`;
 
+/** AI 能力底座：把散落在代码里的技术方案在界面上显性化，每项都可展开看实现细节 */
+const TECH_CAPABILITIES = [
+  {
+    title: 'Agent 编排',
+    brief: 'plan → act → observe 自主循环，按需组合工具并输出决策轨迹',
+    icon: <BrainCircuit className="h-4 w-4" />,
+    c: 'var(--sage)',
+    points: [
+      '4 个可组合工具：诗句检索、诗人小传、意象释义、格律校验',
+      '条件触发 + 独立工具并行 + 失败降级，单轮最多 4 步',
+      '每步决策实时推送到「思考轨迹」，调用链可回看',
+    ],
+  },
+  {
+    title: '混合检索 RAG',
+    brief: 'BM25 与向量召回融合，CrossEncoder 精排后再交给大模型',
+    icon: <Layers className="h-4 w-4" />,
+    c: 'var(--muted-blue)',
+    points: [
+      '34.4 万条诗句向量（BGE-small-zh，512 维），本地索引常驻',
+      '关键词与语义双路召回合并，避免古诗专名精确匹配丢失',
+      '精排后保留 Top-K，引用可追溯到具体诗题与原句',
+    ],
+  },
+  {
+    title: '格律引擎',
+    brief: '用确定性算法约束生成，而不是指望模型“自觉押韵”',
+    icon: <Scale className="h-4 w-4" />,
+    c: 'var(--sepia)',
+    points: [
+      '生成前把平仄、韵脚、字数作为硬约束写入提示词',
+      '生成后在本地复核，检测到矛盾即判不合格并重试',
+      '格律判定由服务端算法完成，不额外消耗 token',
+    ],
+  },
+  {
+    title: 'MCP 工具协议',
+    brief: '按 JSON-RPC 2.0 暴露检索能力，可被外部 Agent 直接调用',
+    icon: <Plug className="h-4 w-4" />,
+    c: 'var(--gold-wash)',
+    points: [
+      '实现 MCP 标准的 tools/list 与 tools/call',
+      '外部客户端可用统一协议接入诗词知识库',
+      '与内部 Agent 共用同一套工具实现，不维护两套逻辑',
+    ],
+  },
+  {
+    title: '多模态能力',
+    brief: '文本、图像理解、文生图、语音识别与合成串成一条链路',
+    icon: <Images className="h-4 w-4" />,
+    c: 'var(--rose)',
+    points: [
+      'GLM-4V 识别图片意境并反查诗句，CogView 生成配图',
+      'faster-whisper 本地语音识别，edge-tts 逐句朗读',
+      '视觉与语音走独立服务，不阻塞文本主链路',
+    ],
+  },
+];
+
 export default async function DashboardPage() {
   const session = await auth();
-  const uid = session!.user.id!;
-  const name = session!.user.name || '诗词探索者';
+  // 会话过期或未登录时直接回登录页，避免服务端渲染空指针
+  if (!session?.user?.id) redirect('/login');
+  const uid = session.user.id;
+  const name = session.user.name || '诗词探索者';
 
   const [favCount, creationCount, annotateCount, histories, readPoems, annotateDistinctList, dailyCount, imageryTop, agentLogs, poemTotal] =
     await Promise.all([
@@ -130,19 +192,21 @@ export default async function DashboardPage() {
             <Sparkles className="h-4 w-4" /> 开始AI注解
           </Link>
         </div>
-        {/* AI 实时证据条：最近一次 RAG 调用的真实链路数据，让「AI 正在发生」首屏可见 */}
+        {/* AI 实时证据条：默认折叠，评委需要时展开，不占用户首屏 */}
         {agentLogs[0] && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3.5 py-2 font-ui text-xs" style={{ background: 'color-mix(in srgb, var(--on-image) 10%, transparent)', color: 'color-mix(in srgb, var(--on-image) 85%, transparent)' }}>
-            <span className="inline-flex items-center gap-1.5 font-medium text-on-image">
+          <details className="mt-4 rounded-lg px-3.5 py-2 font-ui text-xs" style={{ background: 'color-mix(in srgb, var(--on-image) 10%, transparent)', color: 'color-mix(in srgb, var(--on-image) 85%, transparent)' }}>
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-on-image [&::-webkit-details-marker]:hidden">
               <span className="pulse-dot" /> AI 引擎运行中
-            </span>
-            <span style={{ color: 'color-mix(in srgb, var(--on-image) 40%, transparent)' }}>|</span>
-            <span>
-              最近一次：检索 {(poemTotal / 10000).toFixed(1)} 万首 → 命中 {(agentLogs[0].retrievedChunks as string[] | null)?.length ?? 0} 篇 → 引用 {(agentLogs[0].answer?.match(/《/g) || []).length} 处
-            </span>
-            <span style={{ color: 'color-mix(in srgb, var(--on-image) 40%, transparent)' }}>|</span>
-            <span>{agentLogs[0].model || 'glm-4-flash'} · {((agentLogs[0].latencyMs ?? 0) / 1000).toFixed(1)}s</span>
-          </div>
+              <span className="ml-auto font-normal" style={{ color: 'color-mix(in srgb, var(--on-image) 55%, transparent)' }}>运行数据 ▼</span>
+            </summary>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                最近一次：检索 {(poemTotal / 10000).toFixed(1)} 万首 → 命中 {(agentLogs[0].retrievedChunks as string[] | null)?.length ?? 0} 篇 → 引用 {(agentLogs[0].answer?.match(/《/g) || []).length} 处
+              </span>
+              <span style={{ color: 'color-mix(in srgb, var(--on-image) 40%, transparent)' }}>|</span>
+              <span>{agentLogs[0].model || 'glm-4-flash'} · {((agentLogs[0].latencyMs ?? 0) / 1000).toFixed(1)}s</span>
+            </div>
+          </details>
         )}
       </HeroCarousel>
 
@@ -163,6 +227,32 @@ export default async function DashboardPage() {
             <div className="mt-1.5 font-ui text-xs text-ink-soft">{s.label}</div>
           </div>
         ))}
+      </section>
+
+      {/* AI 能力底座：让技术深度在界面上可被直接看见 */}
+      <section className="anim-fade-up" style={{ animationDelay: '0.12s' }}>
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="font-ui text-[15px] font-medium text-ink-deep">AI 能力底座</h2>
+          <span className="font-ui text-[11px] text-ink-soft">点击展开技术实现</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {TECH_CAPABILITIES.map((t) => (
+            <details key={t.title} className="paper-card p-4">
+              <summary className="flex cursor-pointer list-none items-start gap-3">
+                <span className="shrink-0 rounded-lg p-2" style={{ background: tint(t.c, 12), color: readable(t.c) }}>{t.icon}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-ui text-sm font-medium text-ink-deep">{t.title}</span>
+                  <span className="mt-0.5 block font-ui text-[11px] leading-relaxed text-ink-soft">{t.brief}</span>
+                </span>
+              </summary>
+              <ul className="mt-3 space-y-1.5 border-t pt-3 font-ui text-[11px] leading-relaxed text-ink-mid" style={{ borderColor: 'var(--border-c)' }}>
+                {t.points.map((p) => (
+                  <li key={p} className="flex gap-1.5"><span className="shrink-0 text-sepia">·</span><span>{p}</span></li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </div>
       </section>
 
       {/* 学习路径：三阶段真实进度 + 下一首推荐 */}
@@ -298,7 +388,7 @@ export default async function DashboardPage() {
                 <span className="absolute -left-5 top-1 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: 'var(--sage)' }} />
                 <div className="font-ui text-sm text-ink-deep">{prettyQuery(l.userQuery)}</div>
                 <p className="mt-0.5 font-ui text-xs text-ink-soft">
-                  glm-4-flash · 知识库检索 {(l.retrievedChunks as string[] | null)?.length ?? 0} 篇 · {l.latencyMs ?? 0}ms
+                  知识库检索 {(l.retrievedChunks as string[] | null)?.length ?? 0} 篇 · 已生成
                 </p>
                 <p className="mt-0.5 font-ui text-xs text-ink-soft">
                   {l.createdAt.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}

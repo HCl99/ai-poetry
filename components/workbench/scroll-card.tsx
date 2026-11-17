@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 诗画长卷分享卡：水墨意境图 + 竖排右起诗句 + 题签 + 印章页脚
+ * 诗画长卷分享卡：竖排右起诗句 + 题签 + 印章页脚
  * 离屏渲染后经 downloadSharePng（html2canvas）合成长图 PNG
  * 注意：html2canvas 不支持 flex gap 与 writing-mode，竖排以逐字 flex 列模拟，间距一律用 margin
  */
@@ -14,8 +14,6 @@ export interface ScrollCardProps {
   poemLines: string[];
   /** 现代文原文/灵感 */
   note?: string;
-  /** 水墨意境图 URL（可空） */
-  image?: string;
   footer: string;
 }
 
@@ -33,7 +31,7 @@ function splitColumns(lines: string[]): string[] {
   return cols.slice(0, MAX_COLS);
 }
 
-export function ScrollCard({ title, subtitle, poemLines, note, image, footer }: ScrollCardProps) {
+export function ScrollCard({ title, subtitle, poemLines, note, footer }: ScrollCardProps) {
   const cols = splitColumns(poemLines);
   const titleChars = [...title.replace(/[·\s]/g, '')].slice(0, 10);
   return (
@@ -63,17 +61,6 @@ export function ScrollCard({ title, subtitle, poemLines, note, image, footer }: 
         <span style={{ marginLeft: 10, fontFamily: BRUSH, fontSize: 22, color: '#3A3835' }}>墨韵诗心</span>
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#8B857E', fontFamily: SANS }}>{subtitle}</span>
       </div>
-
-      {/* 水墨意境图 */}
-      {image && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={image}
-          crossOrigin="anonymous"
-          alt="水墨意境图"
-          style={{ marginTop: 16, width: '100%', borderRadius: 10, border: '1px solid #D4CFC5' }}
-        />
-      )}
 
       {/* 长卷正文：竖排右起，题签列居最右 */}
       <div

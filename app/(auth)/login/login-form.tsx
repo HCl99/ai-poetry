@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authenticate } from './actions';
-import { PasswordInput, TEXT_INPUT_CLASS, INPUT_ICON_CLASS } from '@/components/password-input';
+import { PasswordInput, TEXT_INPUT_CLASS, INPUT_ICON_CLASS, INVALID_STYLE } from '@/components/password-input';
 import { FormError, shakeAuthCard } from '@/components/form-error';
-
-const REMEMBER_KEY = 'moyun:remembered-email';
 
 function MailIcon() {
   return (
@@ -23,31 +21,13 @@ export function LoginForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [emailMsg, setEmailMsg] = useState('');
-  const [remember, setRemember] = useState(false);
-  const [savedEmail, setSavedEmail] = useState('');
+  const [invalid, setInvalid] = useState(false);
   const router = useRouter();
 
-  // 记住我：初始化时回填上次记住的邮箱
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(REMEMBER_KEY);
-      if (saved) {
-        setSavedEmail(saved);
-        setRemember(true);
-      }
-    } catch {
-      /* localStorage 不可用时静默降级 */
-    }
-  }, []);
-
-  function toggleRemember() {
-    setRemember((v) => !v);
-  }
-
-  /** 邮箱即时校验：blur 时反馈格式，出错后输入中实时纠正（与注册页密码即时校验同一体验语言） */
-  function checkEmail(v: string) {
+  /** 账号即时校验：只在输入含 @ 时按邮箱格式提示，纯用户名不校验 */
+  function checkAccount(v: string) {
     const t = v.trim();
-    setEmailMsg(t && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? '邮箱格式似乎不正确' : '');
+    setEmailMsg(t.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? '邮箱格式似乎不正确' : '');
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -55,26 +35,29 @@ export function LoginForm() {
     setError('');
     // 提前抓取表单值：React 合成事件的 currentTarget 在 await 之后会被置空
     const fd = new FormData(e.currentTarget);
-    const email = String(fd.get('email') || '');
     setLoading(true);
     try {
       const err = await authenticate(fd);
       if (err) {
         setError(err);
+        setInvalid(true);
         shakeAuthCard();
         setLoading(false);
         return;
       }
-      // 登录成功：按勾选状态写入/清除记住的邮箱，展示成功态 0.6s 后跳转首页
-      try {
-        if (remember && email) localStorage.setItem(REMEMBER_KEY, email);
-        else localStorage.removeItem(REMEMBER_KEY);
-      } catch {
-        /* 忽略存储异常 */
-      }
       setLoading(false);
       setSuccess(true);
-      setTimeout(() => router.push('/home'), 600);
+      // signIn 成功后 NextAuth 会写 session cookie，短暂等待 cookie 生效
+      setTimeout(async () => {
+        try {
+          const r = await fetch('/api/auth/session', { credentials: 'include' });
+          const s = await r.json();
+          if (s?.user?.role === 'admin') router.push('/admin');
+          else router.push('/home');
+        } catch {
+          router.push('/home');
+        }
+      }, 700);
     } catch {
       setError('网络异常，请重试');
       shakeAuthCard();
@@ -83,32 +66,49 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 px-8 pb-2 font-ui">
+    <form onSubmit={handleSubmit} className="space-y-4 px-8 pb-8 font-ui">
       <div>
+        <label htmlFor="account" className="mb-1 block font-ui text-xs text-ink-soft">
+          账号（邮箱/用户名）
+        </label>
         <div className="group relative">
           <span className={INPUT_ICON_CLASS}><MailIcon /></span>
           <input
-            name="email"
-            type="email"
+            id="account"
+            name="account"
+            type="text"
             required
-            placeholder="邮箱"
-            autoComplete="email"
-            defaultValue={savedEmail}
-            onBlur={(e) => checkEmail(e.currentTarget.value)}
-            onChange={(e) => { if (emailMsg) checkEmail(e.currentTarget.value); }}
+            placeholder="请输入邮箱或用户名"
+            autoComplete="username"
+            onBlur={(e) => checkAccount(e.currentTarget.value)}
+            onChange={(e) => {
+              setInvalid(false);
+              if (emailMsg) checkAccount(e.currentTarget.value);
+            }}
+            aria-invalid={invalid || undefined}
             className={TEXT_INPUT_CLASS}
+            style={invalid ? INVALID_STYLE : undefined}
           />
         </div>
         {emailMsg && <p className="mt-1.5 text-xs" style={{ color: '#A67C7C' }}>{emailMsg}</p>}
       </div>
-      <PasswordInput name="password" placeholder="密码" required autoComplete="current-password" />
-
-      <div className="flex items-center justify-between text-sm text-ink-soft">
-        {/* 记住我：真实实现——勾选后本地记住邮箱，下次自动填充 */}
-        <label className="flex cursor-pointer select-none items-center gap-1.5">
-          <input type="checkbox" checked={remember} onChange={toggleRemember} className="accent-[#3A3835]" style={{ width: 14, height: 14 }} />
-          记住我
+      <div>
+        <label htmlFor="password" className="mb-1 block font-ui text-xs text-ink-soft">
+          密码
         </label>
+        <PasswordInput
+          id="password"
+          name="password"
+          placeholder="请输入密码"
+          required
+          autoComplete="current-password"
+          invalid={invalid}
+          onChange={() => setInvalid(false)}
+        />
+      </div>
+
+      {/* 辅助链接：忘记密码紧跟密码框，符合「输入→辅助→主操作」的阅读顺序 */}
+      <div className="flex justify-end text-sm text-ink-soft">
         <Link href="/forgot" className="text-muted-blue transition-ink hover:underline">
           忘记密码？
         </Link>
@@ -125,6 +125,21 @@ export function LoginForm() {
         {loading && !success && <span className="spinner" style={{ width: 16, height: 16 }} />}
         {success ? '✓ 正在进入诗境…' : loading ? '登录中…' : '登  录'}
       </button>
+
+      <p className="text-center font-ui text-[11px] leading-relaxed text-ink-soft">
+        登录即表示同意{' '}
+        <Link href="/legal/terms" className="text-muted-blue transition-ink hover:underline">《用户协议》</Link>
+        {' '}与{' '}
+        <Link href="/legal/privacy" className="text-muted-blue transition-ink hover:underline">《隐私政策》</Link>
+      </p>
+
+      {/* 注册引导放在主操作之后，作为页面收尾 */}
+      <div className="text-center text-sm text-ink-soft">
+        还没有账号？{' '}
+        <Link href="/register" className="font-medium text-muted-blue transition-ink hover:underline">
+          立即注册
+        </Link>
+      </div>
     </form>
   );
 }

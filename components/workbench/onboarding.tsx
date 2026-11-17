@@ -21,7 +21,7 @@ const STEPS = [
   },
   {
     title: '把现代文写成诗',
-    desc: '「风格迁移」输入一段白话，生成李白、苏轼、杜甫等五种风格作品，还能配水墨意境图。',
+    desc: '「风格迁移」输入一段白话，生成李白、苏轼、杜甫等五种风格作品。',
     href: '/workbench/transfer',
     hrefLabel: '去创作',
   },
@@ -32,7 +32,11 @@ export function Onboarding() {
 
   // 挂载后再读 localStorage，避免 SSR/客户端不一致
   useEffect(() => {
-    if (!localStorage.getItem(STORE_KEY)) setStep(0);
+    try {
+      if (!localStorage.getItem(STORE_KEY)) setStep(0);
+    } catch {
+      // 存储被禁用（隐私模式/配额满）时不弹引导，避免遮罩挡住整个工作台
+    }
   }, []);
 
   if (step === null) return null;
@@ -40,23 +44,21 @@ export function Onboarding() {
   const last = step === STEPS.length - 1;
 
   function finish() {
-    localStorage.setItem(STORE_KEY, '1');
+    try {
+      localStorage.setItem(STORE_KEY, '1');
+    } catch {
+      // 写失败也必须关闭：遮罩是全屏的，关不掉等于整个应用点不动
+    }
     setStep(null);
   }
 
   return (
     <div
-      className="fixed inset-0 z-[900] flex items-end justify-center bg-black/25 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
+      className="fixed bottom-4 right-4 z-[100] w-[calc(100%-2rem)] max-w-[380px]"
+      role="complementary"
       aria-label="新手引导"
-      onClick={finish}
-      onKeyDown={(e) => { if (e.key === 'Escape') finish(); }}
     >
-      <div
-        className="anim-fade-up paper-card w-full max-w-[380px] p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="anim-fade-up paper-card w-full p-6">
         <div className="flex items-center justify-between">
           <span className="font-ui text-[11px] tracking-widest text-ink-soft">
             新手引导 · {step + 1} / {STEPS.length}

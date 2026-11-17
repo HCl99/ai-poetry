@@ -9,16 +9,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: '邮箱', type: 'email' },
+        account: { label: '账号', type: 'text' },
         password: { label: '密码', type: 'password' },
       },
       async authorize(credentials) {
-        const email = credentials?.email as string | undefined;
+        const account = (credentials?.account as string | undefined)?.trim();
         const password = credentials?.password as string | undefined;
-        if (!email || !password) return null;
+        if (!account || !password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
+        // 账号支持「邮箱」或「用户名（邮箱前缀）」，二者任选其一
+        const user = await prisma.user.findFirst({
+          where: { OR: [{ email: account.toLowerCase() }, { username: account }] },
         });
         if (!user) return null;
 

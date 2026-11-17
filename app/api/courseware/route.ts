@@ -3,15 +3,13 @@ import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
 import { hybridCoarse, vectorCorpusSize } from '@/lib/vectorStore';
 import { checkAiRateLimit } from '@/lib/rateLimit';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
+import { executeMcpTool } from '@/lib/mcp';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 /**
  * 教学课件生成：面向语文教师的轻量课堂拓展工具（PRD 用户角色「语文教师」）
@@ -35,6 +33,7 @@ export async function POST(req: Request) {
 
   // RAG：相似诗篇（向量不可用则降级为无上下文直出）
   let relatedCtx = '';
+  const mcpTools: { name: string; args: Record<string, unknown>; resultCount: number }[] = [];
   try {
     const queryVec = await embedText(queryText);
     const corpusSize = await vectorCorpusSize();
@@ -54,6 +53,24 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error('courseware RAG error:', (e as Error)?.message);
   }
+
+  // MCP 工具调用：通过 search_poetry 检索同类诗篇作为教学拓展素材（体现 MCP 协议集成）
+  try {
+    const mcpRes = await executeMcpTool('search_poetry', { keyword: poem.author, dynasty: poem.dynasty, top_k: 3 });
+    if (!mcpRes.isError) {
+      const data = JSON.parse(mcpRes.content[0].text) as { results: { title: string; author: string; dynasty: string; excerpt: string }[] };
+      const extra = data.results
+        .filter((r) => !(r.title === poem.title && r.author === poem.author))
+        .slice(0, 2)
+        .map((r) => `《${r.title}》〔${r.dynasty}〕${r.author}：${r.excerpt}`)
+        .join('\n');
+      if (extra) relatedCtx = relatedCtx ? `${relatedCtx}\n${extra}` : extra;
+      mcpTools.push({ name: 'search_poetry', args: { keyword: poem.author, dynasty: poem.dynasty }, resultCount: data.results.length });
+    }
+  } catch (e) {
+    console.warn('courseware MCP search_poetry skipped:', (e as Error)?.message);
+  }
+
   const bio = await prisma.poetBio.findFirst({ where: { name: poem.author } });
   const bioCtx = bio?.bioSimp?.slice(0, 200) || bio?.bioDesc?.slice(0, 200) || '';
 
@@ -83,11 +100,21 @@ ${bioCtx ? `\n【诗人小传】${bioCtx}\n` : ''}${relatedCtx ? `\n【同类诗
         { role: 'user', content: prompt },
       ],
       temperature: 0.5,
-      max_tokens: 1200,
+      // 原来 1200 会在「七、作业布置」处被截断，正文出现半句话，看起来像乱码
+      max_tokens: 2400,
     });
-    const md = (resp.choices?.[0]?.message?.content || '').trim().replace(/^```(?:markdown)?\s*/i, '').replace(/```\s*$/, '').trim();
+    let md = (resp.choices?.[0]?.message?.content || '').trim().replace(/^```(?:markdown)?\s*/i, '').replace(/```\s*$/, '').trim();
+    // 模型常无视「不要代码块围栏」，残留的 ``` 会在预览里显示成乱码，这里统一清掉
+    md = md.replace(/^```[a-zA-Z]*\s*$/gm, '').replace(/```/g, '').trim();
+    // 「诗文诵读」一律以库中原诗为准：模型偶尔漏写、或把原文塞进代码块导致该节为空
+    const poemBlock = `## 三、诗文诵读\n${origText}\n`;
+    if (/##\s*三、\s*诗文诵读/.test(md)) {
+      md = md.replace(/(##\s*三、\s*诗文诵读)([\s\S]*?)(?=\n##\s|$)/, poemBlock.trimEnd() + '\n');
+    } else {
+      md = md.replace(/(##\s*四、)/, `${poemBlock}\n$1`);
+    }
     if (md.length < 100) return Response.json({ error: '生成失败，请重试' }, { status: 500 });
-    return Response.json({ markdown: md });
+    return Response.json({ markdown: md, mcpTools });
   } catch (e) {
     console.error('courseware generate error:', (e as Error)?.message);
     return Response.json({ error: '生成失败，请稍后重试' }, { status: 500 });

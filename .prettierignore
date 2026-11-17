@@ -1,0 +1,7 @@
+node_modules
+.next
+data
+public
+docs/evidence
+*.min.js
+package-lock.json

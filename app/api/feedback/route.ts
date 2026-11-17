@@ -1,11 +1,12 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { FEEDBACK_TYPES } from '@/lib/community';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
 /** F3 个人中心：提交意见反馈 */
-export async function POST(req: Request) {
+async function POST_impl(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
 
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
 }
 
 /** F3 个人中心：我的反馈历史（含管理员回复） */
-export async function GET() {
+async function GET_impl() {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
 
@@ -50,3 +51,6 @@ export async function GET() {
     })),
   });
 }
+
+export const POST = withApi(POST_impl);
+export const GET = withApi(GET_impl);

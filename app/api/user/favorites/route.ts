@@ -1,9 +1,10 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+async function GET_impl() {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
   const favs = await prisma.favorite.findMany({
@@ -35,7 +36,7 @@ export async function GET() {
   );
 }
 
-export async function POST(req: Request) {
+async function POST_impl(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
   const { poemId } = (await req.json()) as { poemId?: string };
@@ -61,3 +62,6 @@ export async function POST(req: Request) {
   });
   return Response.json({ ok: true, favorited: true });
 }
+
+export const GET = withApi(GET_impl);
+export const POST = withApi(POST_impl);

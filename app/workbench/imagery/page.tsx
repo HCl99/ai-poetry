@@ -10,7 +10,8 @@ export default async function ImageryPage({
 }) {
   const [imagery, edges] = await Promise.all([
     prisma.imagery.findMany({ orderBy: { count: 'desc' } }),
-    prisma.imageryCooccurrence.findMany({ orderBy: { weight: 'desc' }, take: 200 }),
+    // 全量共现边（当前库内 1,225 条），截断会导致冷门意象误显示为「暂无共现数据」
+    prisma.imageryCooccurrence.findMany({ orderBy: { weight: 'desc' } }),
   ]);
 
   return (

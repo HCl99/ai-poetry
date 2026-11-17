@@ -1,0 +1,501 @@
+{
+  "samples": [
+    {
+      "feature": "annotate",
+      "poem": "山居秋暝",
+      "author": "王维",
+      "latencyMs": 13992,
+      "usage": {
+        "prompt_tokens": 956,
+        "completion_tokens": 171,
+        "total_tokens": 1127
+      },
+      "serverLatencyMs": 13883,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "annotate",
+      "poem": "望岳",
+      "author": "杜甫",
+      "latencyMs": 17024,
+      "usage": {
+        "prompt_tokens": 1182,
+        "completion_tokens": 186,
+        "total_tokens": 1368
+      },
+      "serverLatencyMs": 16973,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "annotate",
+      "poem": "望岳",
+      "author": "杜甫",
+      "latencyMs": 16149,
+      "usage": {
+        "prompt_tokens": 983,
+        "completion_tokens": 235,
+        "total_tokens": 1218
+      },
+      "serverLatencyMs": 16098,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "annotate",
+      "poem": "登鹳雀楼",
+      "author": "耿𣲗",
+      "latencyMs": 19042,
+      "usage": {
+        "prompt_tokens": 765,
+        "completion_tokens": 287,
+        "total_tokens": 1052
+      },
+      "serverLatencyMs": 19010,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "annotate",
+      "poem": "黄鹤楼",
+      "author": "崔颢",
+      "latencyMs": 26480,
+      "usage": {
+        "prompt_tokens": 866,
+        "completion_tokens": 358,
+        "total_tokens": 1224
+      },
+      "serverLatencyMs": 26428,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "annotate",
+      "poem": "望岳",
+      "author": "杜甫",
+      "latencyMs": 14812,
+      "usage": {
+        "prompt_tokens": 2221,
+        "completion_tokens": 157,
+        "total_tokens": 2378
+      },
+      "serverLatencyMs": 14755,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "followup",
+      "question": "这首诗的写作背景是什么？",
+      "latencyMs": 8595,
+      "usage": {
+        "prompt_tokens": 785,
+        "completion_tokens": 100,
+        "total_tokens": 885
+      },
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "followup",
+      "question": "诗中“望”字有怎样的表达效果？",
+      "latencyMs": 10544,
+      "usage": {
+        "prompt_tokens": 827,
+        "completion_tokens": 130,
+        "total_tokens": 957
+      },
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "followup",
+      "question": "能否举一首同意境的诗作对比？",
+      "latencyMs": 11575,
+      "usage": {
+        "prompt_tokens": 791,
+        "completion_tokens": 140,
+        "total_tokens": 931
+      },
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "libai",
+      "text": "周末回到老家，院子里那棵老槐树还在，奶奶坐在树下择菜，阳光把",
+      "latencyMs": 10821,
+      "usage": {
+        "prompt_tokens": 2950,
+        "completion_tokens": 118,
+        "total_tokens": 3068
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "libai",
+      "text": "加班到深夜走出写字楼，城市已经安静下来，只有便利店的灯还亮着",
+      "latencyMs": 21497,
+      "usage": {
+        "prompt_tokens": 2184,
+        "completion_tokens": 92,
+        "total_tokens": 2276
+      },
+      "attempts": 3,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "libai",
+      "text": "毕业那天在车站送别室友，列车开动时才意识到以后很难再见，站台",
+      "latencyMs": 13134,
+      "usage": {
+        "prompt_tokens": 3070,
+        "completion_tokens": 126,
+        "total_tokens": 3196
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "libai",
+      "text": "清晨爬山，雾还没散，松树上有露水，远处寺庙的钟声传过来，心里",
+      "latencyMs": 13946,
+      "usage": {
+        "prompt_tokens": 2920,
+        "completion_tokens": 142,
+        "total_tokens": 3062
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": true,
+      "pingzeOk": false,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "sushi",
+      "text": "周末回到老家，院子里那棵老槐树还在，奶奶坐在树下择菜，阳光把",
+      "latencyMs": 22561,
+      "usage": {
+        "prompt_tokens": 1868,
+        "completion_tokens": 309,
+        "total_tokens": 2177
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "sushi",
+      "text": "加班到深夜走出写字楼，城市已经安静下来，只有便利店的灯还亮着",
+      "latencyMs": 19114,
+      "usage": {
+        "prompt_tokens": 1844,
+        "completion_tokens": 264,
+        "total_tokens": 2108
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "sushi",
+      "text": "毕业那天在车站送别室友，列车开动时才意识到以后很难再见，站台",
+      "latencyMs": 5385,
+      "usage": {
+        "prompt_tokens": 369,
+        "completion_tokens": 73,
+        "total_tokens": 442
+      },
+      "attempts": 1,
+      "firstPass": true,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "sushi",
+      "text": "清晨爬山，雾还没散，松树上有露水，远处寺庙的钟声传过来，心里",
+      "latencyMs": 4448,
+      "usage": {
+        "prompt_tokens": 365,
+        "completion_tokens": 73,
+        "total_tokens": 438
+      },
+      "attempts": 1,
+      "firstPass": true,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wanyue",
+      "text": "周末回到老家，院子里那棵老槐树还在，奶奶坐在树下择菜，阳光把",
+      "latencyMs": 15456,
+      "usage": {
+        "prompt_tokens": 1709,
+        "completion_tokens": 186,
+        "total_tokens": 1895
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wanyue",
+      "text": "加班到深夜走出写字楼，城市已经安静下来，只有便利店的灯还亮着",
+      "latencyMs": 13627,
+      "usage": {
+        "prompt_tokens": 1674,
+        "completion_tokens": 190,
+        "total_tokens": 1864
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wanyue",
+      "text": "毕业那天在车站送别室友，列车开动时才意识到以后很难再见，站台",
+      "latencyMs": 3815,
+      "usage": {
+        "prompt_tokens": 342,
+        "completion_tokens": 47,
+        "total_tokens": 389
+      },
+      "attempts": 1,
+      "firstPass": true,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wanyue",
+      "text": "清晨爬山，雾还没散，松树上有露水，远处寺庙的钟声传过来，心里",
+      "latencyMs": 10842,
+      "usage": {
+        "prompt_tokens": 1222,
+        "completion_tokens": 153,
+        "total_tokens": 1375
+      },
+      "attempts": 3,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wangwei",
+      "text": "周末回到老家，院子里那棵老槐树还在，奶奶坐在树下择菜，阳光把",
+      "latencyMs": 12756,
+      "usage": {
+        "prompt_tokens": 2886,
+        "completion_tokens": 102,
+        "total_tokens": 2988
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wangwei",
+      "text": "加班到深夜走出写字楼，城市已经安静下来，只有便利店的灯还亮着",
+      "latencyMs": 7773,
+      "usage": {
+        "prompt_tokens": 1316,
+        "completion_tokens": 50,
+        "total_tokens": 1366
+      },
+      "attempts": 2,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wangwei",
+      "text": "毕业那天在车站送别室友，列车开动时才意识到以后很难再见，站台",
+      "latencyMs": 13028,
+      "usage": {
+        "prompt_tokens": 2111,
+        "completion_tokens": 78,
+        "total_tokens": 2189
+      },
+      "attempts": 3,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "wangwei",
+      "text": "清晨爬山，雾还没散，松树上有露水，远处寺庙的钟声传过来，心里",
+      "latencyMs": 11415,
+      "usage": {
+        "prompt_tokens": 2171,
+        "completion_tokens": 90,
+        "total_tokens": 2261
+      },
+      "attempts": 3,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "dufu",
+      "text": "周末回到老家，院子里那棵老槐树还在，奶奶坐在树下择菜，阳光把",
+      "latencyMs": 14234,
+      "usage": {
+        "prompt_tokens": 3801,
+        "completion_tokens": 103,
+        "total_tokens": 3904
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": true,
+      "pingzeOk": false,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "dufu",
+      "text": "加班到深夜走出写字楼，城市已经安静下来，只有便利店的灯还亮着",
+      "latencyMs": 14125,
+      "usage": {
+        "prompt_tokens": 3813,
+        "completion_tokens": 124,
+        "total_tokens": 3937
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": true,
+      "rhymeOk": true,
+      "pingzeOk": true,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "dufu",
+      "text": "毕业那天在车站送别室友，列车开动时才意识到以后很难再见，站台",
+      "latencyMs": 25135,
+      "usage": {
+        "prompt_tokens": 3985,
+        "completion_tokens": 314,
+        "total_tokens": 4299
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": false,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "transfer",
+      "style": "dufu",
+      "text": "清晨爬山，雾还没散，松树上有露水，远处寺庙的钟声传过来，心里",
+      "latencyMs": 19340,
+      "usage": {
+        "prompt_tokens": 3913,
+        "completion_tokens": 246,
+        "total_tokens": 4159
+      },
+      "attempts": 4,
+      "firstPass": false,
+      "meterPass": false,
+      "rhymeOk": false,
+      "pingzeOk": false,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "feature": "weekly",
+      "latencyMs": 30832,
+      "usage": {
+        "prompt_tokens": 860,
+        "completion_tokens": 406,
+        "total_tokens": 1266
+      },
+      "attempts": 2,
+      "meterPass": false,
+      "ok": true,
+      "error": ""
+    }
+  ],
+  "meta": {
+    "base": "http://127.0.0.1:3003",
+    "user": "223a3980-4626-49cf-a060-9715e73f3f7f"
+  }
+}

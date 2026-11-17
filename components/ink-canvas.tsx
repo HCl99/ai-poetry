@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react';
  * 墨迹拖尾画布：鼠标划过/点击页面时晕开水墨粒子（径向扩散 + 渐隐，模拟宣纸洇墨）。
  * 位于背景层之上、内容层之下——表单卡片不透明，墨痕自然只在留白处可见，不干扰阅读。
  * 配色低饱和（墨/赭/黛 7:2:1 加权），仅指针精确设备启用；
- * prefers-reduced-motion / motion-off 时完全不启动；无存活粒子时 rAF 休眠，零常驻开销。
+ * prefers-reduced-motion 时完全不启动；无存活粒子时 rAF 休眠，零常驻开销。
  */
 type Drop = { x: number; y: number; r: number; maxR: number; a: number; decay: number; c: string };
 
@@ -32,7 +32,6 @@ export function InkCanvas() {
   useEffect(() => {
     if (!window.matchMedia('(pointer: fine)').matches) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (document.documentElement.classList.contains('motion-off')) return;
     const el = ref.current;
     const g2d = el?.getContext('2d');
     if (!el || !g2d) return;

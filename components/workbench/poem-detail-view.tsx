@@ -83,8 +83,20 @@ export function PoemDetailView({ poem, bio, initial }: {
 
   async function copyCourseware() {
     try {
-      await navigator.clipboard.writeText(cwText);
-      show('课件已复制，可粘贴到 WPS / Word / Markdown 工具');
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(cwText);
+      } else {
+        // 降级方案：创建临时 textarea 执行 execCommand('copy')
+        const ta = document.createElement('textarea');
+        ta.value = cwText;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      show('✓ 课件全文已复制，可粘贴到 WPS / Word / Markdown 工具');
     } catch {
       show('复制失败，请手动选择文本复制');
     }

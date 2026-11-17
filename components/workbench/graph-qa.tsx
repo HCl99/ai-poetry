@@ -192,7 +192,11 @@ export function GraphQaPanel({ kind, focus }: { kind: 'poet' | 'imagery'; focus:
 
           {/* 输入行 */}
           <div className="flex items-center gap-2">
-            <VoiceInputButton size="sm" onText={(t) => setInput((prev) => (prev ? `${prev}${t}` : t))} />
+            <VoiceInputButton
+              size="sm"
+              onText={(t) => setInput((prev) => (prev ? `${prev}${t}` : t))}
+              onError={setError}
+            />
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}

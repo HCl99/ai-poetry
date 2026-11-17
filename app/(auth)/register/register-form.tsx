@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { registerUser } from './actions';
 import { PasswordInput, TEXT_INPUT_CLASS, INPUT_ICON_CLASS } from '@/components/password-input';
 import { FormError, shakeAuthCard } from '@/components/form-error';
 import { EmailCodeField } from '@/components/email-code-field';
+import { checkEmailFormat } from '@/lib/email-format';
 
 function MailIcon() {
   return (
@@ -42,6 +44,9 @@ const STRENGTH_META = [
   { label: '强', color: '#6B8E7B' },
 ] as const;
 
+/** 8-20 位，且必须同时包含数字与字母 */
+const PWD_RE = /^(?=.*\d)(?=.*[A-Za-z]).{8,20}$/;
+
 export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,7 +59,7 @@ export function RegisterForm() {
   /** 邮箱即时校验：blur 时反馈格式，出错后输入中实时纠正 */
   function checkEmail(v: string) {
     const t = v.trim();
-    setEmailMsg(t && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? '邮箱格式似乎不正确' : '');
+    setEmailMsg(t ? checkEmailFormat(t) || '' : '');
   }
 
   /** 确认密码即时比对：输入即提示，不留到提交后 */
@@ -67,10 +72,14 @@ export function RegisterForm() {
 
   function validate(e: React.FormEvent<HTMLFormElement>): string {
     const fd = new FormData(e.currentTarget);
+    const emailValue = String(fd.get('email') || '').trim();
     const password = String(fd.get('password') || '');
     const confirm = String(fd.get('confirm') || '');
+    const emailError = checkEmailFormat(emailValue);
+    if (emailError) return emailError;
+    if (password.length < 8 || password.length > 20) return '密码长度需为 8-20 位';
+    if (!PWD_RE.test(password)) return '密码需同时包含数字和字母';
     if (password !== confirm) return '两次输入的密码不一致';
-    if (password.length < 6) return '密码长度至少 6 位';
     return '';
   }
 
@@ -100,7 +109,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 px-8 pb-6 font-ui">
+    <form onSubmit={handleSubmit} className="space-y-4 px-8 pb-8 font-ui">
       <div className="group relative">
         <span className={INPUT_ICON_CLASS}><UserIcon /></span>
         <input name="name" placeholder="昵称（选填）" autoComplete="nickname" className={TEXT_INPUT_CLASS} />
@@ -112,7 +121,7 @@ export function RegisterForm() {
             name="email"
             type="email"
             required
-            placeholder="邮箱"
+            placeholder="邮箱（支持 QQ 邮箱等主流邮箱）"
             autoComplete="email"
             onBlur={(e) => checkEmail(e.currentTarget.value)}
             onChange={(e) => { setEmail(e.currentTarget.value); if (emailMsg) checkEmail(e.currentTarget.value); }}
@@ -125,9 +134,10 @@ export function RegisterForm() {
       <div>
         <PasswordInput
           name="password"
-          placeholder="密码（至少 6 位）"
+          placeholder="密码（8-20 位，含数字和字母）"
           required
-          minLength={6}
+          minLength={8}
+          maxLength={20}
           autoComplete="new-password"
           onChange={(e) => setPwd(e.currentTarget.value)}
         />
@@ -154,7 +164,8 @@ export function RegisterForm() {
           name="confirm"
           placeholder="确认密码"
           required
-          minLength={6}
+          minLength={8}
+          maxLength={20}
           autoComplete="new-password"
           onChange={checkConfirm}
           onBlur={checkConfirm}
@@ -175,6 +186,20 @@ export function RegisterForm() {
         {loading && <span className="spinner" style={{ width: 16, height: 16 }} />}
         {loading ? '注册中…' : '注  册'}
       </button>
+
+      <p className="text-center font-ui text-[11px] leading-relaxed text-ink-soft">
+        注册即表示同意{' '}
+        <Link href="/legal/terms" className="text-muted-blue transition-ink hover:underline">《用户协议》</Link>
+        {' '}与{' '}
+        <Link href="/legal/privacy" className="text-muted-blue transition-ink hover:underline">《隐私政策》</Link>
+      </p>
+
+      <div className="text-center text-sm text-ink-soft">
+        已有账号？{' '}
+        <Link href="/login" className="font-medium text-muted-blue transition-ink hover:underline">
+          直接登录
+        </Link>
+      </div>
     </form>
   );
 }

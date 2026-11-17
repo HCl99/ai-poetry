@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen, CheckCircle2, Eye, Flag, GraduationCap, Loader2, RefreshCw, Route, Sparkles } from 'lucide-react';
 import { useToast, Toast } from '@/components/toast';
@@ -18,9 +18,9 @@ const MODES: { key: Mode; name: string; hint: string }[] = [
   { key: 'first', name: '首字提示', hint: '只给每句首字，默写全句' },
 ];
 const SOURCES: { key: Source; name: string; hint: string }[] = [
-  { key: 'daily', name: '每日一诗', hint: '今日全站同一首' },
+  { key: 'random', name: '随机经典', hint: '全库随机一首，每次进入都不一样' },
+  { key: 'daily', name: '每日一诗', hint: '今日全站同一首，想换可点「换一首」' },
   { key: 'fav', name: '我的收藏', hint: '从收藏中抽背' },
-  { key: 'random', name: '随机经典', hint: '全库随机一首' },
 ];
 
 /** 计算每句被遮蔽的汉字下标（汉字序列中的位置） */
@@ -38,7 +38,8 @@ function hiddenIndices(line: string, mode: Mode): Set<number> {
 
 export function ReciteView() {
   const [mode, setMode] = useState<Mode>('mask');
-  const [source, setSource] = useState<Source>('daily');
+  // 默认随机经典：每次进入都是新诗，避免天天同一首
+  const [source, setSource] = useState<Source>('random');
   const [phase, setPhase] = useState<Phase>('setup');
   const [poem, setPoem] = useState<RecitePoem | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -48,19 +49,31 @@ export function ReciteView() {
   const [loading, setLoading] = useState(false);
   const [judging, setJudging] = useState(false);
   const [readCount, setReadCount] = useState<number | null>(null);
+  const [stageInfo, setStageInfo] = useState<{ label: string; size: number } | null>(null);
   const { msg, show } = useToast();
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  /** 拉取一首闯关诗并初始化填空状态 */
-  async function loadPoem(src: Source) {
+  // 进入页面即读取学段，让题源提示在抽题前就可显示
+  useEffect(() => {
+    fetch('/api/user/stage')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.label) setStageInfo({ label: d.label, size: 0 }); })
+      .catch(() => {});
+  }, []);
+
+  /** 拉取一首闯关诗并初始化填空状态（excludeId 用于「换一首」避免抽到同一首） */
+  async function loadPoem(src: Source, excludeId?: string) {
     if (loading) return;
     setLoading(true);
     try {
-      const r = await fetch(`/api/recite/poem?source=${src}`);
+      const qs = new URLSearchParams({ source: src });
+      if (excludeId) qs.set('exclude', excludeId);
+      const r = await fetch(`/api/recite/poem?${qs.toString()}`);
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || '取诗失败');
       if ((d.lines || []).length < 2) throw new Error('诗篇句数不足，换一首试试');
       setPoem(d);
+      if (d.stageLabel) setStageInfo({ label: d.stageLabel, size: d.poolSize ?? 0 });
       setAnswers({});
       setCellOk({});
       setLineOk([]);
@@ -74,6 +87,9 @@ export function ReciteView() {
       setLoading(false);
     }
   }
+
+  /** 输入法组字过程中的临时显示值：拼音阶段不写入答案，等上屏后再落格 */
+  const [draft, setDraft] = useState<Record<string, string>>({});
 
   function setCell(key: string, ch: string, nextIdx: number) {
     setAnswers((a) => ({ ...a, [key]: ch.slice(-1) }));
@@ -136,6 +152,11 @@ export function ReciteView() {
 
       {phase === 'setup' && (
         <div className="paper-card p-6">
+          <p className="mb-4 rounded-lg px-3 py-2 font-ui text-xs text-ink-mid" style={{ background: 'var(--inset)' }}>
+            当前学段：<b>{stageInfo?.label ?? '初中'}</b>
+            {stageInfo?.size ? ` · 题源为${stageInfo.label}必背 ${stageInfo.size} 首` : ''}
+            ，在「头像 → 账户设置 → 学段」可切换
+          </p>
           <h2 className="mb-4 font-ui text-[15px] font-medium text-ink-deep">选择闯关模式</h2>
           <div className="flex flex-wrap gap-2.5">
             {MODES.map((m) => (
@@ -224,15 +245,31 @@ export function ReciteView() {
                     }
                     const key = `${li}:${myCi}`;
                     const idx = inputSeq++;
-                    const showAnswer = reveal || (judged && cellOk[key] === false);
+                    // 只在用户主动点击「查看答案」时才显示正确答案；
+                    // 判分后错格保持显示用户自己的作答（红色），不再自动填入正确答案，
+                    // 避免与行末「应为：xxx」同时出现造成「两份答案」的困惑
+                    const showAnswer = reveal;
                     return (
                       <span key={i} className="relative inline-block">
                         <input
                           ref={(el) => { inputRefs.current[idx] = el; }}
-                          value={showAnswer ? ch : answers[key] || ''}
+                          value={showAnswer ? ch : (draft[key] ?? answers[key] ?? '')}
                           readOnly={judged}
-                          maxLength={1}
-                          onChange={(e) => setCell(key, e.target.value, idx + 1)}
+                          onChange={(e) => {
+                            // 中文输入法组字期间（如输入 yue）不能逐字母写入，
+                            // 否则拼音会被拆进相邻格子，这里先存草稿，上屏后统一落格
+                            if ((e.nativeEvent as InputEvent).isComposing) {
+                              setDraft((d) => ({ ...d, [key]: e.target.value }));
+                              return;
+                            }
+                            setDraft((d) => { if (!(key in d)) return d; const n = { ...d }; delete n[key]; return n; });
+                            setCell(key, e.target.value, idx + 1);
+                          }}
+                          onCompositionEnd={(e) => {
+                            const v = e.currentTarget.value;
+                            setDraft((d) => { if (!(key in d)) return d; const n = { ...d }; delete n[key]; return n; });
+                            setCell(key, v, idx + 1);
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.nativeEvent.isComposing && phase === 'play') judge(poem);
                           }}
@@ -278,6 +315,15 @@ export function ReciteView() {
               >
                 换模式
               </button>
+              <button
+                onClick={() => loadPoem(source === 'daily' ? 'random' : source, poem.id)}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-4 font-ui text-sm text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
+                title="换一首同来源的其他诗篇"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                换一首
+              </button>
             </div>
           ) : (
             <div className="mt-5 space-y-4 anim-fade-up">
@@ -297,7 +343,7 @@ export function ReciteView() {
                   <Eye className="h-3.5 w-3.5" /> {reveal ? '隐藏答案' : '查看答案'}
                 </button>
                 <button
-                  onClick={() => loadPoem('random')}
+                  onClick={() => loadPoem('random', poem.id)}
                   disabled={loading}
                   className="inline-flex items-center gap-1.5 rounded-lg border-[1.5px] border-c px-4 py-2 font-ui text-xs text-ink-mid transition-ink hover:bg-paper-dark disabled:opacity-60"
                 >

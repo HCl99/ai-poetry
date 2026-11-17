@@ -3,15 +3,12 @@ import { prisma } from '@/lib/prisma';
 import { embedText } from '@/lib/embedding';
 import { hybridCoarse, vectorCorpusSize } from '@/lib/vectorStore';
 import { checkAiRateLimit } from '@/lib/rateLimit';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 /**
  * F2 译文/赏析：为诗词生成白话译文与鉴赏短评

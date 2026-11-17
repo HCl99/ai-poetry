@@ -28,6 +28,9 @@ export async function embedText(text: string): Promise<number[] | null> {
 /** 批量文本向量化（≤64 条），失败自动重试一次 */
 export async function embedBatch(texts: string[]): Promise<(number[] | null)[]> {
   if (texts.length === 0) return [];
+  // 云端部署没有本地 BGE 服务：EMBED_SERVER_URL=off 时立即返回 null（走关键词检索），
+  // 否则每次请求都要等 30s 超时，页面会像卡死
+  if ((process.env.EMBED_SERVER_URL || '').trim() === 'off') return texts.map(() => null);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       return await fetchEmbed(texts);

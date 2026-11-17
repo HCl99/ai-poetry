@@ -6,31 +6,28 @@ import { rerankTopN } from '@/lib/reranker';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
 import { screenInput, createOutputGuard, SAFE_REPLY } from '@/lib/content-filter';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 const MODEL = 'glm-4-flash';
 
-/** F4 AI 助手：多轮自由问答，独立检索知识库，引用硬约束与归因校验 */
+/** F4 AI 助手：多轮自由对话，诗词知识库作为可选增强，无主题限制 */
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
-  const limited = checkAiRateLimit(session.user.id, 'assistant', 10);
+  const limited = checkAiRateLimit(session.user.id, 'assistant', 100);
   if (limited) return limited;
 
   const { message, history } = (await req.json()) as {
     message?: string;
     history?: { role: 'user' | 'assistant'; content: string }[];
   };
-  const q = message?.trim().slice(0, 200);
-  if (!q) return Response.json({ error: '请输入问题' }, { status: 400 });
+  const q = message?.trim().slice(0, 2000);
+  if (!q) return Response.json({ error: '请输入内容' }, { status: 400 });
 
   const screen = screenInput(
     [q, ...(history || []).filter((m) => m.role === 'user').map((m) => m.content || '')].join('\n'),
@@ -38,12 +35,21 @@ export async function POST(req: Request) {
   if (!screen.ok) return Response.json({ error: screen.reason }, { status: 400 });
 
   const t0 = Date.now();
+  // 客户端点「停止」会断开连接；若不拦截，后续 enqueue 会抛 "Controller is already closed"
+  let closed = false;
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(sseEvent(event, data));
+        } catch {
+          closed = true;
+        }
+      };
       try {
         /* ---- 阶段 1：意图理解 + 检索（与 AI 注解同一检索链路） ---- */
-        send('step', { label: '理解问题', detail: q });
+        send('step', { label: '理解问题', detail: q, phase: 'understand' });
 
         const queryVec = await embedText(q);
         const corpusSize = await vectorCorpusSize();
@@ -54,7 +60,7 @@ export async function POST(req: Request) {
         let rerankApplied = false;
 
         if (useVector) {
-          send('step', { label: '检索诗词知识库', detail: `向量 ${corpusSize} 篇 · 混合粗排 top20` });
+          send('step', { label: '检索诗词知识库', detail: `向量 ${corpusSize} 篇 · 混合粗排 top20`, phase: 'retrieve' });
           const coarse = await hybridCoarse(q, queryVec!, 20);
           if (coarse.length) {
             const bodies = await prisma.poem.findMany({
@@ -62,7 +68,7 @@ export async function POST(req: Request) {
               select: { id: true, paragraphsSimp: true },
             });
             const bodyMap = new Map(bodies.map((b) => [b.id, ((b.paragraphsSimp as string[] | null) || []).join('')]));
-            send('step', { label: 'CrossEncoder 精排', detail: `${coarse.length} 篇候选 → top5` });
+            send('step', { label: 'CrossEncoder 精排', detail: `${coarse.length} 篇候选 → top5`, phase: 'rerank' });
             const reranked = await rerankTopN(
               q,
               coarse.map((h) => ({ ...h, body: bodyMap.get(h.id) || '' })),
@@ -77,7 +83,7 @@ export async function POST(req: Request) {
             }
           }
         } else {
-          send('step', { label: '检索诗词知识库', detail: '向量服务不可用，降级为关键词检索' });
+          send('step', { label: '检索诗词知识库', detail: '向量服务不可用，降级为关键词检索', phase: 'retrieve' });
           // 降级：LIKE 关键词检索
           const kw = q.replace(/[《》？！?!,，。.\s]/g, '').slice(0, 8);
           if (kw) {
@@ -96,10 +102,11 @@ export async function POST(req: Request) {
         // 诗人小传：问句中点名的诗人才载入（小表全量匹配）
         const poets = await prisma.poetBio.findMany({ select: { name: true, bioSimp: true, bioDesc: true } });
         const bio = poets.find((p) => q.includes(p.name));
-        if (bio) send('step', { label: '匹配诗人小传', detail: `已载入《${bio.name}》传记资料` });
+        if (bio) send('step', { label: '匹配诗人小传', detail: `已载入《${bio.name}》传记资料`, phase: 'retrieve' });
 
         send('step', {
           label: '检索完成',
+          phase: 'retrieved',
           detail: related.length
             ? `${rerankApplied ? '精排' : '语义'}命中 ${related.length} 篇${bio ? ' · 诗人小传已载入' : ''}`
             : '未检索到相关诗篇，将基于通用知识回答',
@@ -113,24 +120,28 @@ export async function POST(req: Request) {
         const bioCtx = bio?.bioSimp?.slice(0, 260) || bio?.bioDesc?.slice(0, 260) || '';
         const histMsgs = (history || [])
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .slice(-6)
-          .map((m) => ({ role: m.role as 'user' | 'assistant', content: (m.content || '').slice(0, 500) }));
+          .slice(-20)
+          .map((m) => ({ role: m.role as 'user' | 'assistant', content: (m.content || '').slice(0, 1500) }));
 
-        const prompt = `你是一位博学而亲切的古典诗词助手「墨韵诗心」。请回答用户关于古诗词的问题，250字以内。
+        const knowledgeBlock = related.length
+          ? `【知识库检索结果（仅供参考，按需引用）】\n${relatedCtx}\n${bioCtx ? `诗人小传：${bioCtx}\n` : ''}如引用知识库中的诗篇，请以《诗题》标注出处；无依据时可使用通用知识回答。`
+          : '';
 
-${relatedCtx ? `【知识库检索结果（回答依据）】\n${relatedCtx}\n${bioCtx ? `诗人小传：${bioCtx}\n` : ''}\n引用诗篇作为论据时，仅允许引用上述检索结果列表中的诗题，以《诗题》明确标注，严禁杜撰或引用列表之外的诗篇。` : '注意：知识库未检索到相关内容，如无可靠依据请直说，不要编造具体诗句出处。'}
+        const prompt = knowledgeBlock
+          ? `${knowledgeBlock}\n\n【用户问题】${q}`
+          : `【用户问题】${q}`;
 
-【用户问题】${q}`;
+        send('step', { label: '组织回答', detail: `依据 ${related.length} 篇检索结果 · ${histMsgs.length} 轮上下文 · ${MODEL}`, phase: 'generate' });
 
         const resp = await client.chat.completions.create({
           model: MODEL,
           messages: [
-            { role: 'system', content: '你是古典诗词助手，回答准确、简洁、有依据，不编造引文。' },
+            { role: 'system', content: '你是一个友好、博学的 AI 助手「墨韵诗心」，由"墨韵诗心"古典诗词文化探索平台提供。你擅长古典诗词、文学艺术与传统文化，但也乐于回答任何领域的问题。回答准确、自然、有深度，篇幅根据问题复杂度灵活把握，简单问题简洁作答，复杂问题可以展开论述。如有知识库中的诗篇可参考则自然融入，无参考时基于你的知识回答即可。' },
             ...histMsgs,
             { role: 'user', content: prompt },
           ],
-          temperature: 0.6,
-          max_tokens: 600,
+          temperature: 0.8,
+          max_tokens: 2000,
           stream: true,
         });
 
@@ -148,7 +159,7 @@ ${relatedCtx ? `【知识库检索结果（回答依据）】\n${relatedCtx}\n${
           }
         }
 
-        /* ---- 引用归因校验：回答中的《诗题》必须全部落在检索列表内 ---- */
+        /* ---- 引用归因：仅做日志记录，不拦截 ---- */
         const citedTitles = [...full.matchAll(/《([^《》]{1,20})》/g)].map((m) => m[1]);
         const retrievedTitles = new Set(related.map((r) => r.title));
         const citations = [...new Set(citedTitles)];
@@ -181,8 +192,17 @@ ${relatedCtx ? `【知识库检索结果（回答依据）】\n${relatedCtx}\n${
         console.error('assistant error', e?.message || e);
         send('error', { error: 'AI助手暂时无法回答，请重试' });
       } finally {
-        controller.close();
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            closed = true;
+          }
+        }
       }
+    },
+    cancel() {
+      closed = true;
     },
   });
 

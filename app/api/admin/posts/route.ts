@@ -1,5 +1,9 @@
 import { requireAdmin } from '@/lib/admin';
 import { prisma } from '@/lib/prisma';
+import { POST_STATUS, canReview, isPostStatus, reviewTarget } from '@/lib/postWorkflow';
+import { REVIEW_ACTION } from '@/lib/postReviewMeta';
+import { writeReviewLog } from '@/lib/postReviewLog';
+import { sendNotification, NOTIF_TYPE } from '@/lib/notification';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,12 +13,13 @@ export async function GET(req: Request) {
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
 
   const url = new URL(req.url);
-  const status = url.searchParams.get('status') || 'pending';
+  const rawStatus = url.searchParams.get('status') || 'pending';
+  const status = isPostStatus(rawStatus) ? rawStatus : POST_STATUS.PENDING;
   const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
   const size = Math.min(50, Math.max(5, Number(url.searchParams.get('size')) || 10));
 
-  const where: Record<string, unknown> = {};
-  if (status === 'pending' || status === 'approved' || status === 'rejected') where.status = status;
+  // 白名单外的取值一律回落到 pending，避免非法参数导致返回全部状态的数据
+  const where = { status };
 
   const [total, rows] = await Promise.all([
     prisma.post.count({ where }),
@@ -49,7 +54,7 @@ export async function GET(req: Request) {
   });
 }
 
-/** F15 帖子审核：通过 / 拒绝（附审核备注）/ 删除 */
+/** F15 帖子审核：通过 / 拒绝（附审核备注）/ 删除；作者已撤回的投稿不可再审批 */
 export async function PUT(req: Request) {
   const session = await requireAdmin();
   if (!session) return Response.json({ error: '无权访问' }, { status: 403 });
@@ -63,19 +68,51 @@ export async function PUT(req: Request) {
     return Response.json({ error: 'id 非法' }, { status: 400 });
   }
 
-  const post = await prisma.post.findUnique({ where: { id: pid }, select: { id: true } });
+  const post = await prisma.post.findUnique({ where: { id: pid }, select: { id: true, status: true, title: true, userId: true } });
   if (!post) return Response.json({ error: '帖子不存在' }, { status: 404 });
+  const operatorName = session.user.name || session.user.email || '管理员';
 
   if (action === 'approve' || action === 'reject') {
     if (action === 'reject' && !note?.trim()) return Response.json({ error: '拒绝时请填写审核备注' }, { status: 400 });
-    const updated = await prisma.post.update({
-      where: { id: pid },
-      data: { status: action === 'approve' ? 'approved' : 'rejected', reviewNote: note?.trim() || null },
+    if (!canReview(post.status)) {
+      return Response.json({ error: '该投稿已被作者撤回，不可再次审批，仅可删除' }, { status: 409 });
+    }
+    const target = reviewTarget(action);
+    // 条件更新保证「撤回优先」：若用户恰好在此期间撤回，审批不会把它重新放出
+    const r = await prisma.post.updateMany({
+      where: { id: pid, status: { not: POST_STATUS.WITHDRAWN } },
+      data: { status: target, reviewNote: note?.trim() || null },
     });
-    return Response.json({ id: String(updated.id), status: updated.status });
+    if (r.count === 0) return Response.json({ error: '该投稿刚被作者撤回，请刷新后重试' }, { status: 409 });
+    await writeReviewLog({
+      postId: pid, postTitle: post.title,
+      action: action === 'approve' ? REVIEW_ACTION.APPROVE : REVIEW_ACTION.REJECT,
+      fromStatus: post.status, toStatus: target,
+      operatorId: session.user.id, operatorName, actorRole: 'admin',
+      note: note?.trim() || null,
+    });
+    // 通知作者
+    const title = action === 'approve' ? '🎉 你的帖子已通过审核' : '📝 你的帖子未通过审核';
+    const body = action === 'approve'
+      ? `《${post.title}》已被管理员通过，现已公开展示`
+      : `《${post.title}》未通过审核${note ? `：${note.trim()}` : ''}`;
+    const link = '/workbench/community';
+    sendNotification(
+      post.userId,
+      action === 'approve' ? NOTIF_TYPE.POST_APPROVED : NOTIF_TYPE.POST_REJECTED,
+      title, body, link,
+    );
+    return Response.json({ id: String(pid), status: target });
   }
 
   if (action === 'delete') {
+    // 先留痕再删帖：日志表不设外键，帖子删除后这条历史依然可查
+    await writeReviewLog({
+      postId: pid, postTitle: post.title, action: REVIEW_ACTION.DELETE,
+      fromStatus: post.status,
+      operatorId: session.user.id, operatorName, actorRole: 'admin',
+      note: note?.trim() || '帖子及其评论、点赞一并删除',
+    });
     await prisma.comment.deleteMany({ where: { postId: pid } });
     await prisma.postLike.deleteMany({ where: { postId: pid } });
     await prisma.post.delete({ where: { id: pid } });

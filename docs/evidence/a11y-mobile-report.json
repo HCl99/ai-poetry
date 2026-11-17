@@ -1,0 +1,75 @@
+{
+  "weekly": {
+    "scrollW": 375,
+    "clientW": 375,
+    "h_overflow": false
+  },
+  "focus_order_weekly": [
+    {
+      "tag": "button",
+      "role": null,
+      "label": "菜单"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "墨墨韵诗心"
+    },
+    {
+      "tag": "button",
+      "role": null,
+      "label": "切换夜色主题"
+    },
+    {
+      "tag": "button",
+      "role": null,
+      "label": "通知"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "系统首页"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "工作台"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "研习周报"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "AI智能注解"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "风格迁移"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "AI 助手"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "诗人对话"
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "label": "以图搜诗"
+    }
+  ],
+  "fallback_network": {
+    "text": "墨墨韵诗心系统首页工作台研习周报AI 创作AI智能注解风格迁移AI 助手诗人对话以图搜诗我的创作探索学习诗词探索背诵闯关"
+  },
+  "fallback_quota": {
+    "text": "墨墨韵诗心系统首页工作台研习周报AI 创作AI智能注解风格迁移AI 助手诗人对话以图搜诗我的创作探索学习诗词探索背诵闯关"
+  }
+}

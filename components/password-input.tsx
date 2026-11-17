@@ -42,20 +42,32 @@ export const TEXT_INPUT_CLASS =
 export const INPUT_ICON_CLASS =
   'pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft transition-ink group-focus-within:text-[#3A3835]';
 
+/** 错误态：水墨红描边 + 轻光晕，让用户视线停在出错字段，而不是只看到底部提示条 */
+export const INVALID_STYLE = {
+  borderColor: '#A67C7C',
+  boxShadow: '0 0 0 3px rgba(166,124,124,0.14)',
+} as const;
+
 /** 密码输入框：带锁形图标与明文/密文切换，登录注册与弹窗共用 */
 export function PasswordInput({
   name,
+  id,
   placeholder,
   required,
   minLength,
+  maxLength,
   autoComplete,
+  invalid,
   onChange,
   onBlur,
 }: {
   name: string;
+  id?: string;
   placeholder: string;
   required?: boolean;
+  invalid?: boolean;
   minLength?: number;
+  maxLength?: number;
   autoComplete?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onBlur?: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -71,16 +83,20 @@ export function PasswordInput({
       <span className={INPUT_ICON_CLASS}><LockIcon /></span>
       <input
         name={name}
+        id={id}
         type={show ? 'text' : 'password'}
         required={required}
         minLength={minLength}
+        maxLength={maxLength}
         autoComplete={autoComplete}
         placeholder={placeholder}
         onChange={onChange}
         onBlur={onBlur}
         onKeyDown={trackCaps}
         onKeyUp={trackCaps}
+        aria-invalid={invalid || undefined}
         className={PASSWORD_INPUT_CLASS}
+        style={invalid ? INVALID_STYLE : undefined}
       />
       <button
         type="button"

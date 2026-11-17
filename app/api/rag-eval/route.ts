@@ -4,16 +4,12 @@ import { retrieveForPoem } from '@/lib/poemRetrieve';
 import { checkCitations } from '@/lib/citationCheck';
 import { SSE_HEADERS, sseEvent } from '@/lib/sse';
 import { checkAiRateLimit } from '@/lib/rateLimit';
-import { parseAnnotationSections, withFallback } from '@/lib/sections';
-import OpenAI from 'openai';
+import { getAiClient } from '@/lib/aiClient';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const client = new OpenAI({
-  apiKey: process.env.ZHIPUAI_API_KEY,
-  baseURL: process.env.ZHIPUAI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-});
+const client = getAiClient();
 
 /**
  * RAG 引用评测：随机抽 N 首诗，真实跑「检索 → 生成 → 引用校验」闭环，
@@ -42,21 +38,35 @@ export async function POST(req: Request) {
   const samples = [...picks.values()];
   if (samples.length < 2) return Response.json({ error: '抽样失败，诗篇不足' }, { status: 500 });
 
+  // 客户端点「停止」会断开连接；不拦截会让后续 enqueue 抛 "Controller is already closed"
+  let closed = false;
+  req.signal.addEventListener('abort', () => { closed = true; });
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => controller.enqueue(sseEvent(event, data));
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(sseEvent(event, data));
+        } catch {
+          closed = true;
+        }
+      };
       try {
         send('meta', {
           total: samples.length,
+          poolSize: totalPoems,
           samples: samples.map((s, i) => ({ i, title: s.title, author: s.author, dynasty: s.dynasty })),
         });
 
         let cumValid = 0;
         let cumTotal = 0;
         let cumLatency = 0;
+        let okCount = 0;
         const invalidAll: { title: string; invalid: string[] }[] = [];
 
         for (let i = 0; i < samples.length; i++) {
+          // 用户已停止：不再继续消耗 AI 额度、也不再写库
+          if (closed) break;
           const poem = samples[i];
           const t0 = Date.now();
           try {
@@ -90,13 +100,13 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
               max_tokens: 1000,
             });
             const full = resp.choices?.[0]?.message?.content || '';
-            withFallback(full, parseAnnotationSections(full)); // 保持与主注解同一解析链路
             const cite = checkCitations(full, poem.title, related.map((r) => r.title));
             const latencyMs = Date.now() - t0;
 
             cumValid += cite.valid.length;
             cumTotal += cite.total;
             cumLatency += latencyMs;
+            okCount += 1;
             if (cite.invalid.length) invalidAll.push({ title: poem.title, invalid: [...new Set(cite.invalid)] });
 
             await prisma.annotationLog.create({
@@ -123,18 +133,31 @@ ${bioCtx ? `诗人小传：${bioCtx}\n` : ''}${relatedCtx ? `语义相似诗篇�
 
         send('done', {
           samples: samples.length,
+          okSamples: okCount,
+          failed: samples.length - okCount,
           totalCites: cumTotal,
           validCites: cumValid,
           rate: cumTotal ? +(cumValid / cumTotal * 100).toFixed(1) : null,
-          avgLatencyMs: Math.round(cumLatency / samples.length),
+          // 平均延迟只统计成功的样本，避免失败样本按 0ms 把均值拉低
+          avgLatencyMs: okCount ? Math.round(cumLatency / okCount) : 0,
           invalid: invalidAll,
         });
       } catch (e: any) {
         console.error('rag-eval stream error', e?.message || e);
         send('error', { error: '评测运行失败，请重试' });
       } finally {
-        controller.close();
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            closed = true;
+          }
+        }
       }
+    },
+    cancel() {
+      // 客户端已断开：让循环在下一轮 break，不再消耗 AI 额度
+      closed = true;
     },
   });
   return new Response(stream, { headers: SSE_HEADERS });

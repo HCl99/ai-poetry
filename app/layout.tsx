@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { MotionPrefInit } from '@/components/motion-pref';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -12,14 +11,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-CN">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.cn" />
-        <link
-          href="https://fonts.googleapis.cn/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
-          rel="stylesheet"
-        />
+        {/* 首屏毛笔字子集（约 13KB）：决定 LCP，全量字体改为按 unicode-range 惰性加载 */}
+        <link rel="preload" href="/fonts/brush-boot.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </head>
       <body className="font-serif antialiased">
-        <MotionPrefInit />
         {children}
       </body>
     </html>

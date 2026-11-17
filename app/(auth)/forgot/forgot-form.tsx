@@ -6,6 +6,7 @@ import { resetPassword } from './actions';
 import { PasswordInput, TEXT_INPUT_CLASS, INPUT_ICON_CLASS } from '@/components/password-input';
 import { FormError, shakeAuthCard } from '@/components/form-error';
 import { EmailCodeField } from '@/components/email-code-field';
+import { checkEmailFormat } from '@/lib/email-format';
 
 function MailIcon() {
   return (
@@ -21,6 +22,21 @@ export function ForgotForm() {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
   const [email, setEmail] = useState('');
+  const [emailMsg, setEmailMsg] = useState('');
+  const [confirmMsg, setConfirmMsg] = useState('');
+
+  /** 邮箱即时校验：不等到提交才提示格式错误 */
+  function checkEmail(v: string) {
+    const t = v.trim();
+    setEmailMsg(t ? checkEmailFormat(t) || '' : '');
+  }
+
+  /** 确认密码即时比对，避免提交后才报不一致 */
+  function checkConfirm(e: React.ChangeEvent<HTMLInputElement>) {
+    const pwd = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="password"]')?.value || '';
+    const c = e.currentTarget.value;
+    setConfirmMsg(c && pwd !== c ? '两次输入的密码不一致' : '');
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -80,17 +96,21 @@ export function ForgotForm() {
           required
           placeholder="注册时使用的邮箱"
           autoComplete="email"
-          onChange={(e) => setEmail(e.currentTarget.value)}
+          onChange={(e) => {
+            setEmail(e.currentTarget.value);
+            if (emailMsg) checkEmail(e.currentTarget.value);
+          }}
+          onBlur={(e) => checkEmail(e.currentTarget.value)}
           className={TEXT_INPUT_CLASS}
         />
       </div>
 
       <EmailCodeField email={email} purpose="reset" />
 
-      <PasswordInput name="password" placeholder="新密码（至少 6 位）" required minLength={6} autoComplete="new-password" />
-      <PasswordInput name="confirm" placeholder="确认新密码" required minLength={6} autoComplete="new-password" />
+      <PasswordInput name="password" placeholder="新密码（8-20 位，含数字和字母）" required minLength={8} maxLength={20} autoComplete="new-password" />
+      <PasswordInput name="confirm" placeholder="确认新密码" required minLength={8} maxLength={20} autoComplete="new-password" onChange={checkConfirm} onBlur={checkConfirm} />
 
-      <FormError msg={error} />
+      <FormError msg={error || emailMsg || confirmMsg} />
 
       <button
         type="submit"

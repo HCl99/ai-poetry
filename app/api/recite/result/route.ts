@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { withApi } from '@/lib/apiHandler';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 /** 背诵闯关成绩落库：写入 history，驱动学习路径「启蒙诵读」进度 */
-export async function POST(req: Request) {
+async function POST_impl(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: '未登录' }, { status: 401 });
   const uid = session.user.id;
@@ -40,3 +41,5 @@ export async function POST(req: Request) {
   });
   return Response.json({ ok: true, readCount: distinct.length });
 }
+
+export const POST = withApi(POST_impl);

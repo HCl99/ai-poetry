@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
  * 工作台欢迎卡水墨场景轮播（v2.5 古典图景化）：
  * 4 幅古典水墨山水图（AI 绘制的中国画，存于 public/），每幅配一句贴合系统的话，
  * 8s crossfade 自动轮换；图景叠加墨色压暗遮罩以保证文字可读，并做缓慢推移（Ken Burns）。
- * 底部圆点可手动切换；动效随「减少动态效果」与全局动效开关静止。
+ * 底部圆点可手动切换；动效随系统「减少动态效果」偏好静止。
  */
 const SCENES: { key: string; name: string; line: string; img: string; scrim: string; deco?: ReactNode }[] = [
   {

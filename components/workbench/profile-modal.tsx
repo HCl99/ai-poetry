@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast, Toast } from '@/components/toast';
 import { FEEDBACK_TYPES } from '@/lib/community';
-import { getMotionPref, setMotionPref } from '@/components/motion-pref';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { GOAL_DESC, GOAL_LABEL, GOAL_ORDER, STAGE_DESC, STAGE_LABEL, STAGE_ORDER, type Goal, type Stage } from '@/lib/classics';
 
-type Sub = 'main' | 'favorites' | 'history' | 'creations' | 'notes' | 'settings' | 'help' | 'logout';
+export type Sub = 'main' | 'favorites' | 'history' | 'creations' | 'notes' | 'settings' | 'help' | 'logout';
 
 const MENU: { key: Sub; label: string; icon: string; countKey?: string }[] = [
   { key: 'favorites', label: '我的收藏', icon: 'star', countKey: 'favorites' },
@@ -36,6 +37,17 @@ function Icon({ name }: { name: string }) {
 interface Counts { favorites: number; history: number; creations: number; notes: number }
 const EMPTY_COUNTS: Counts = { favorites: 0, history: 0, creations: 0, notes: 0 };
 
+/** /api/user/favorites 返回项 */
+interface FavItem { id: string; poemId: string; title: string; author: string; dynasty: string; line: string; time: string }
+/** /api/user/history 返回项 */
+interface HistItem { id: string; type: string; typeLabel: string; title: string; desc: string; time: string; color: string }
+/** /api/user/creations 返回项 */
+interface CreationItem { id: string; style: string; input: string; output: string; time: string }
+/** /api/user/notes 返回项 */
+interface NoteItem { id: string; title: string; content: string; time: string }
+/** /api/feedback 返回项 */
+interface FeedbackItem { id: string; type: string; content: string; status: string; reply: string | null; createdAt: string }
+
 /** 头像压缩：居中裁剪为 128×128，输出 JPEG DataURL（约 5-15KB） */
 function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -60,29 +72,41 @@ function compressImage(file: File): Promise<string> {
   });
 }
 
-export function ProfileModal({ open, onClose, user, onLogout }: {
+export function ProfileModal({ open, onClose, user, onLogout, initialSub }: {
   open: boolean;
   onClose: () => void;
   user: { name: string; email: string; avatar?: string | null };
   onLogout: () => void | Promise<void>;
+  /** 打开时直接定位到的子页（如从「反馈已回复」通知跳转过来） */
+  initialSub?: Sub;
 }) {
-  const [sub, setSub] = useState<Sub>('main');
+  const [sub, setSub] = useState<Sub>(initialSub || 'main');
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS);
-  const [favorites, setFavorites] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [creations, setCreations] = useState<any[]>([]);
-  const [notes, setNotes] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<FavItem[]>([]);
+  const [history, setHistory] = useState<HistItem[]>([]);
+  const [creations, setCreations] = useState<CreationItem[]>([]);
+  const [notes, setNotes] = useState<NoteItem[]>([]);
   const { msg, show } = useToast();
   const router = useRouter();
 
+  // 每次打开时按 initialSub 定位子页（未指定则回到主页）
+  useEffect(() => {
+    if (open) setSub(initialSub || 'main');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   /* ---- 设置页状态 ---- */
   const [avatar, setAvatar] = useState<string | null>(user.avatar || null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
   const [name, setName] = useState(user.name);
   const [savingName, setSavingName] = useState(false);
   const [oldPwd, setOldPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
   const [savingPwd, setSavingPwd] = useState(false);
+  const [stage, setStage] = useState<Stage>('junior');
+  const [goal, setGoal] = useState<Goal>('exam');
+  const [savingStage, setSavingStage] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   /* ---- 反馈页状态 ---- */
@@ -90,17 +114,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
   const [fbContent, setFbContent] = useState('');
   const [fbContact, setFbContact] = useState('');
   const [fbSending, setFbSending] = useState(false);
-  const [fbItems, setFbItems] = useState<any[] | null>(null);
-
-  /* ---- 无障碍：界面动效开关（localStorage 持久化） ---- */
-  const [motionOff, setMotionOff] = useState(false);
-  useEffect(() => { setMotionOff(getMotionPref()); }, []);
-  function toggleMotion() {
-    const next = !motionOff;
-    setMotionOff(next);
-    setMotionPref(next);
-    show(next ? '动效已关闭，页面更安静' : '动效已开启');
-  }
+  const [fbItems, setFbItems] = useState<FeedbackItem[] | null>(null);
 
   const loadCounts = useCallback(async () => {
     try {
@@ -117,8 +131,36 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
       setName(user.name);
       setOldPwd(''); setNewPwd(''); setConfirmPwd('');
       setFbType(''); setFbContent(''); setFbContact(''); setFbItems(null);
+      fetch('/api/user/stage')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d?.stage) { setStage(d.stage as Stage); setGoal((d.goal as Goal) ?? 'exam'); } })
+        .catch(() => {});
     }
   }, [open, loadCounts, user.avatar, user.name]);
+
+  /** 保存学段/方向：背诵闯关与诗词测验据此选择题源、难度与默认题型 */
+  async function saveStage(next?: Stage, nextGoal?: Goal) {
+    if (savingStage) return;
+    if (next && next === stage) return;
+    if (nextGoal && nextGoal === goal) return;
+    setSavingStage(true);
+    try {
+      const r = await fetch('/api/user/stage', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: next ?? stage, goal: nextGoal ?? goal }),
+      });
+      const d = await r.json();
+      if (!r.ok) { show(d.error || '保存失败'); return; }
+      if (next) setStage(next);
+      if (nextGoal) setGoal(nextGoal);
+      show(next
+        ? `已切换为${STAGE_LABEL[next]}学段，闯关与测验将按该学段出题`
+        : `已切换为「${GOAL_LABEL[nextGoal!]}」方向`);
+    } finally {
+      setSavingStage(false);
+    }
+  }
 
   /* ---- 设置页：头像压缩上传（128×128 JPEG DataURL） ---- */
   function pickAvatar() { fileRef.current?.click(); }
@@ -129,6 +171,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
     if (!file) return;
     if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) { show('仅支持 PNG / JPG / WebP 图片'); return; }
     try {
+      setAvatarSaving(true);
       const dataUrl = await compressImage(file);
       const r = await fetch('/api/user/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar: dataUrl }) });
       const d = await r.json();
@@ -136,8 +179,10 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
       setAvatar(dataUrl);
       show('头像已更新');
       router.refresh();
-    } catch (err: any) {
-      show(err?.message || '图片处理失败');
+    } catch (err) {
+      show(err instanceof Error ? err.message : '图片处理失败');
+    } finally {
+      setAvatarSaving(false);
     }
   }
 
@@ -194,10 +239,16 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
   /* ---- 反馈页 ---- */
   async function loadFeedback() {
     try {
-      const r = await fetch('/api/feedback');
+      const r = await fetch('/api/feedback', { cache: 'no-store' });
       if (r.ok) setFbItems((await r.json()).items);
     } catch { /* ignore */ }
   }
+
+  // 只有打开「帮助与反馈」时才轮询：管理员在后台回复 / 重新打开后，这里自动更新
+  useAutoRefresh(
+    () => { if (open && sub === 'help') return loadFeedback(); },
+    open && sub === 'help' ? 10000 : 0,
+  );
 
   async function submitFeedback(e: React.FormEvent) {
     e.preventDefault();
@@ -247,19 +298,38 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
           </button>
         </div>
 
+        {/* 本地选图 input 常驻：个人中心主视图与设置页共用同一上传逻辑 */}
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleAvatarFile} />
+
         <div className="overflow-y-auto">
           {/* 用户信息头（主列表） */}
           {sub === 'main' && (
             <>
               <div className="flex items-center gap-3 border-b border-light px-6 py-5">
-                {avatar ? (
-                  <img src={avatar} alt="头像" className="h-11 w-11 rounded-full object-cover" />
-                ) : (
-                  <span className="relative flex h-11 w-11 items-center justify-center rounded-full font-brush text-lg text-white" style={{ background: 'var(--brand-grad)' }}>
-                    {user.name[0]}
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
+                {/* 头像即上传入口：点击调起本地文件选择，悬停显示「更换」 */}
+                <button
+                  type="button"
+                  onClick={pickAvatar}
+                  disabled={avatarSaving}
+                  title="点击从本地电脑选择图片更换头像"
+                  aria-label="更换头像"
+                  className="group relative h-11 w-11 shrink-0 rounded-full transition-ink hover:shadow-ink focus:outline-none"
+                >
+                  {avatar ? (
+                    <img src={avatar} alt="头像" className="h-11 w-11 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full font-brush text-lg text-white" style={{ background: 'var(--brand-grad)' }}>
+                      {user.name[0]}
+                    </span>
+                  )}
+                  <span
+                    className="absolute inset-0 flex items-center justify-center rounded-full font-ui text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 group-disabled:opacity-100"
+                    style={{ background: 'rgba(40,36,32,0.55)' }}
+                  >
+                    {avatarSaving ? '上传中' : '更换'}
                   </span>
-                )}
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-paper-light" style={{ background: '#6B8E7B' }} />
+                </button>
                 <div>
                   <div className="font-ui text-[15px] font-medium text-ink-deep">{user.name}</div>
                   <div className="font-ui text-xs text-ink-soft">{user.email}</div>
@@ -288,7 +358,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
           {sub === 'favorites' && (
             <div className="space-y-3 p-5">
               {favorites.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">还没有收藏诗词，去诗词探索页发现美吧</p>}
-              {favorites.map((f: any) => (
+              {favorites.map((f) => (
                 <div key={f.id} className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                   <div className="flex items-center gap-2">
                     <span className={`dynasty-tag ${DYN[f.dynasty] || 'dynasty-tang'}`}>{f.dynasty || '唐'}</span>
@@ -307,7 +377,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
               {history.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">暂无学习记录</p>}
               <div className="relative space-y-5 pl-5">
                 <span className="absolute left-[7px] top-1 h-[calc(100%-8px)] w-px" style={{ background: 'var(--border-light)' }} />
-                {history.map((h: any) => (
+                {history.map((h) => (
                   <div key={h.id} className="relative">
                     <span className="absolute -left-5 top-1 h-3.5 w-3.5 rounded-full border-2 border-paper-light" style={{ background: h.color || '#6B8E7B' }} />
                     <div className="font-ui text-sm text-ink-deep">{h.title}</div>
@@ -323,7 +393,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
           {sub === 'creations' && (
             <div className="space-y-3 p-5">
               {creations.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">还没有创作，去风格迁移页试试吧</p>}
-              {creations.map((c: any) => (
+              {creations.map((c) => (
                 <div key={c.id} className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                   <div className="flex items-center justify-between">
                     <span className="rounded-full px-2.5 py-0.5 font-ui text-xs" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{c.style}</span>
@@ -340,7 +410,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
           {sub === 'notes' && (
             <div className="space-y-3 p-5">
               {notes.length === 0 && <p className="py-10 text-center font-ui text-sm text-ink-soft">暂无笔记，可在注解页保存心得</p>}
-              {notes.map((n: any) => (
+              {notes.map((n) => (
                 <div key={n.id} className="rounded-lg p-4" style={{ background: 'var(--inset)' }}>
                   <div className="font-ui text-sm font-medium text-ink-deep">{n.title}</div>
                   <p className="mt-1 line-clamp-3 font-ui text-sm leading-relaxed text-ink-mid">{n.content}</p>
@@ -373,7 +443,6 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                     </div>
                     <span className="text-xs text-ink-soft">支持 JPG / PNG / WebP，自动裁剪为圆形 128×128</span>
                   </div>
-                  <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleAvatarFile} />
                 </div>
               </section>
 
@@ -393,6 +462,46 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                   </button>
                 </form>
                 <p className="mt-1.5 text-xs text-ink-soft">邮箱 {user.email} 不可更改</p>
+              </section>
+
+              {/* 学段：决定闯关/测验题源 */}
+              <section>
+                <h4 className="mb-2 text-sm font-medium text-ink-deep">学段与方向</h4>
+                <div className="grid grid-cols-5 gap-2">
+                  {STAGE_ORDER.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={savingStage}
+                      onClick={() => saveStage(s)}
+                      className="rounded-lg border-[1.5px] px-1 py-2 text-xs transition-ink disabled:opacity-60"
+                      style={stage === s
+                        ? { borderColor: 'var(--btn-bg)', background: 'var(--btn-bg)', color: 'var(--btn-text)' }
+                        : { borderColor: 'var(--border-mid, #D8D2C6)', color: 'var(--ink-mid)' }}
+                    >
+                      {STAGE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{STAGE_DESC[stage]}。切换后背诵闯关与诗词测验只出该学段的必背篇目，测验默认难度也随之调整。</p>
+
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {GOAL_ORDER.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      disabled={savingStage}
+                      onClick={() => saveStage(undefined, g)}
+                      className="rounded-lg border-[1.5px] px-1 py-2 text-xs transition-ink disabled:opacity-60"
+                      style={goal === g
+                        ? { borderColor: 'var(--btn-bg)', background: 'var(--btn-bg)', color: 'var(--btn-text)' }
+                        : { borderColor: 'var(--border-mid, #D8D2C6)', color: 'var(--ink-mid)' }}
+                    >
+                      {GOAL_LABEL[g]}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{GOAL_DESC[goal]}</p>
               </section>
 
               {/* 修改密码 */}
@@ -435,27 +544,6 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                 </form>
               </section>
 
-              {/* 界面动效（无障碍） */}
-              <section>
-                <h4 className="mb-2 text-sm font-medium text-ink-deep">界面动效</h4>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!motionOff}
-                  onClick={toggleMotion}
-                  className="flex items-center gap-3"
-                  title={motionOff ? '动效已关闭，点击开启' : '动效开启中，点击关闭'}
-                >
-                  <span
-                    className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-ink"
-                    style={motionOff ? { background: '#C9CFD6' } : { background: 'var(--brand-grad)' }}
-                  >
-                    <span className={`absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${motionOff ? '' : 'translate-x-5'}`} />
-                  </span>
-                  <span className="text-sm text-ink-mid">{motionOff ? '已关闭（减少动态效果）' : '已开启'}</span>
-                </button>
-                <p className="mt-1.5 text-xs text-ink-soft">关闭后登录页水墨动画、入场过渡等装饰动效将静止，降低视觉干扰；设置自动保存，全局生效</p>
-              </section>
             </div>
           )}
 
@@ -526,7 +614,7 @@ export function ProfileModal({ open, onClose, user, onLogout }: {
                     <p className="py-4 text-center font-ui text-xs text-ink-soft">暂无反馈记录</p>
                   ) : (
                     <div className="space-y-2">
-                      {fbItems.map((f: any) => (
+                      {fbItems.map((f) => (
                         <div key={f.id} className="rounded-lg p-3 font-ui" style={{ background: 'var(--inset)' }}>
                           <div className="flex items-center gap-2">
                             <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ background: 'rgba(107,142,123,0.15)', color: '#6B8E7B' }}>{f.type}</span>

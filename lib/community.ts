@@ -1,13 +1,13 @@
 // 学习社区共享常量与工具
 
-/** 社区帖子分类（PRD F10 学习社区） */
-export const POST_CATEGORIES = ['诗词赏析', '学习心得', '原创诗词', '问答'] as const;
+/** 社区帖子分类已改为管理端运行时维护，见 lib/postCategories.ts（此处不再保留编译期常量） */
 
-/** 帖子状态 */
+/** 帖子状态（先审后发 + 作者撤回，状态机见 lib/postWorkflow.ts） */
 export const POST_STATUS_LABEL: Record<string, string> = {
   approved: '已通过',
   pending: '待审核',
   rejected: '已拒绝',
+  withdrawn: '已撤回',
 };
 
 /** 反馈类型 */

@@ -5,6 +5,7 @@
 
 # next.js
 /.next/
+/.next-stale-*/
 /out/
 
 # production
@@ -44,3 +45,23 @@ scripts/_shots/
 
 # AI 生成图本地落盘（运行期产物）
 /public/creations/
+
+# Playwright：登录态、报告与失败产物
+/e2e/.auth/
+/playwright-report/
+/test-results/
+
+# ---- 提交 GitHub 前排除项 ----
+# 本地全量数据库导出（约 1.8GB，远超 GitHub 单文件 100MB 上限）
+/data/ai_poetry.sql
+*.sql.gz
+*.sql.zip
+
+# 运行期日志与本地分享/隧道配置
+*.log
+/.share/
+/scripts/_tmp_*.py
+
+# 本机编辑器与系统文件
+Thumbs.db
+desktop.ini

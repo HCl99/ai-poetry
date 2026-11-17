@@ -303,7 +303,9 @@ SMTP 配置：QQ 邮箱 → 设置 → 账号 → 开启 SMTP 服务 → 生成*
 
 ### 9.2 持续集成
 
-`.github/workflows/ci.yml` 在每次 push / PR 时依次执行：MySQL 8 service 起库 → `prisma generate` → `prisma db push` → `tsc --noEmit` → `npm test` → `npm run build`，任一步失败即红灯。构建使用 dummy 环境变量，不依赖真实模型密钥。
+仓库在 `docs/ci-workflow.example.yml` 提供完整的 GitHub Actions 配置：每次 push / PR 依次执行 MySQL 8 service 起库 → `prisma generate` → `prisma db push` → `tsc --noEmit` → `npm test` → `npm run build`，任一步失败即红灯。构建使用 dummy 环境变量，不依赖真实模型密钥。
+
+> 配置以示例文件形式提供。如需启用 CI，在 GitHub 网页新建 `.github/workflows/ci.yml` 并粘贴该文件内容即可。
 
 ### 9.3 构建体积（`next build`，2026-11 实测）
 
